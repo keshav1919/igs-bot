@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Overview{% endblock %}
+{% block header_title %}Dashboard &amp; Sales Analytics{% endblock %}
+
+{% block content %}
+<!-- Metrics Stats Grid -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-header">
+      <span class="stat-label">Total Revenue</span>
+      <span class="stat-icon">💰</span>
+    </div>
+    <div class="stat-value">{{ total_revenue | default(0) | format_currency(currency) }}</div>
+    <div class="stat-desc">From verified fulfilled orders</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-header">
+      <span class="stat-label">Total Orders</span>
+      <span class="stat-icon">🧾</span>
+    </div>
+    <div class="stat-value">{{ total_orders | default(0) }}</div>
+    <div class="stat-desc">{{ verified_orders_count | default(0) }} successfully verified</div>
+  </div>
+
+  <div class="stat-card" style="{% if pending_verifications_count > 0 %}border-color: rgba(245, 158, 11, 0.6);{% endif %}">
+    <div class="stat-header">
+      <span class="stat-label">Needs Verification</span>
+      <span class="stat-icon">🔍</span>
+    </div>
+    <div class="stat-value" style="color: var(--accent-amber);">{{ pending_verifications_count | default(0) }}</div>
+    <div class="stat-desc">Awaiting admin review</div>
+  </div>
+
+  <div class="stat-card" style="{% if low_stock_count > 0 %}border-color: rgba(239, 68, 68, 0.6);{% endif %}">
+    <div class="stat-header">
+      <span class="stat-label">Stock Alerts</span>
+      <span class="stat-icon">⚠️</span>
+    </div>
+    <div class="stat-value" style="color: {% if low_stock_count > 0 %}var(--accent-rose){% else %}var(--accent-primary){% endif %};">
+      {{ low_stock_count | default(0) }}
+    </div>
+    <div class="stat-desc">Items at or below alert threshold</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-header">
+      <span class="stat-label">Inventory Valuation</span>
+      <span class="stat-icon">📦</span>
+    </div>
+    <div class="stat-value">{{ inventory_valuation | default(0) | format_currency(currency) }}</div>
+    <div class="stat-desc">{{ total_stock_units | default(0) }} total units in stock</div>
+  </div>
+</div>
+
+<!-- Pending Review Alert Box if any -->
+{% if pending_verifications_count > 0 %}
+<div class="card" style="border: 1px solid rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.05);">
+  <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+    <div>
+      <h3 style="color: var(--accent-amber); font-size: 15px; margin-bottom: 4px;">
+        ⚠️ Action Required: {{ pending_verifications_count }} Payment(s) Submitted
+      </h3>
+      <p style="color: var(--text-muted); font-size: 13px;">
+        Customers have submitted transaction references. Per policy, verify on bank/blockchain before releasing deliverables.
+      </p>
+    </div>
+    <a href="/orders?status=PAYMENT_SUBMITTED" class="btn btn-primary btn-sm">Review Pending Orders &rarr;</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Low Stock Alerts Box if any -->
+{% if low_stock_items %}
+<div class="card" style="border: 1px solid rgba(239, 68, 68, 0.4);">
+  <div class="card-header">
+    <span class="card-title" style="color: var(--accent-rose);">⚠️ Low Stock Alerts ({{ low_stock_items|length }})</span>
+    <a href="/inventory?low_stock=true" class="btn btn-secondary btn-sm">View All in Inventory</a>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Listing Title</th>
+          <th>Category</th>
+          <th>Day Group</th>
+          <th>Stock Left</th>
+          <th>Threshold</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in low_stock_items %}
+        <tr>
+          <td><span class="code-tag">{{ item.sku }}</span></td>
+          <td><strong>{{ item.title }}</strong></td>
+          <td>{{ item.category.name if item.category else 'General' }}</td>
+          <td><span class="badge badge-day">{{ item.day_group }}</span></td>
+          <td><strong style="color: var(--accent-rose);">{{ item.quantity }} units</strong></td>
+          <td>{{ item.stock_alert_threshold }}</td>
+          <td>
+            <a href="/inventory/{{ item.id }}/edit" class="btn btn-secondary btn-sm">Restock</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Recent Orders Section -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Recent Customer Orders</span>
+    <div style="display: flex; gap: 8px;">
+      <a href="/orders/export/csv" class="btn btn-secondary btn-sm">📥 Export Orders CSV</a>
+      <a href="/orders" class="btn btn-secondary btn-sm">View All Orders</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Order Code</th>
+          <th>Customer</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Tx Reference</th>
+          <th>Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if recent_orders %}
+          {% for ord in recent_orders %}
+          <tr>
+            <td><a href="/orders/{{ ord.id }}" class="code-tag">{{ ord.order_code }}</a></td>
+            <td>
+              <div>{{ ord.telegram_first_name or 'Customer' }}</div>
+              {% if ord.telegram_username %}
+                <div style="font-size: 11px; color: var(--text-muted);">@{{ ord.telegram_username }}</div>
+              {% endif %}
+            </td>
+            <td><strong>{{ ord.total_amount | format_currency(ord.currency) }}</strong></td>
+            <td><span class="badge badge-{{ ord.status }}">{{ ord.status }}</span></td>
+            <td>
+              {% if ord.tx_reference %}
+                <span class="code-tag">{{ ord.tx_reference }}</span>
+              {% else %}
+                <span style="color: var(--text-subtle);">None</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ ord.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+              <a href="/orders/{{ ord.id }}" class="btn btn-secondary btn-sm">Details</a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">
+              No orders placed yet.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

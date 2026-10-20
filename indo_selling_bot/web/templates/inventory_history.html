@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Change History: {{ item.sku }}{% endblock %}
+{% block header_title %}Inventory Audit Trail: {{ item.sku }}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <span class="card-title">Complete Modification History</span>
+      <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+        Item: <strong>{{ item.title }}</strong> &bull; SKU: <span class="code-tag">{{ item.sku }}</span> &bull; Current Stock: {{ item.quantity }}
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <a href="/inventory/{{ item.id }}/edit" class="btn btn-secondary btn-sm">Edit Listing</a>
+      <a href="/inventory" class="btn btn-secondary btn-sm">&larr; Back to Inventory</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Date &amp; Time (UTC)</th>
+          <th>Action</th>
+          <th>Field</th>
+          <th>Old Value</th>
+          <th>New Value</th>
+          <th>Performed By</th>
+          <th>Notes / Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if history %}
+          {% for log in history %}
+          <tr>
+            <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
+              {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+            </td>
+            <td>
+              <span class="badge {% if log.action == 'CREATE' %}badge-active{% elif log.action == 'DELETE' %}badge-danger{% elif 'STOCK' in log.action %}badge-warning{% else %}badge-day{% endif %}">
+                {{ log.action }}
+              </span>
+            </td>
+            <td><code>{{ log.field_name or '-' }}</code></td>
+            <td style="color: var(--accent-rose); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              {{ log.old_value or '-' }}
+            </td>
+            <td style="color: var(--accent-primary); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              {{ log.new_value or '-' }}
+            </td>
+            <td><strong>{{ log.admin_user }}</strong></td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ log.notes or '-' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No change history recorded for this item yet.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Dashboard{% endblock %} | Indo Commerce Admin</title>
+  <link rel="stylesheet" href="/static/css/dark_theme.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-logo">🛡️</span>
+        <div>
+          <div class="brand-title">Indo Commerce</div>
+        </div>
+        <span class="brand-badge">Admin</span>
+      </div>
+
+      <ul class="nav-links">
+        <li class="nav-item">
+          <a href="/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+            <span>📊</span> Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/inventory" class="nav-link {% if active_page == 'inventory' %}active{% endif %}">
+            <span>📦</span> Inventory Items
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/categories" class="nav-link {% if active_page == 'categories' %}active{% endif %}">
+            <span>🏷️</span> Categories
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/orders" class="nav-link {% if active_page == 'orders' %}active{% endif %}">
+            <span>🧾</span> Orders
+            {% if pending_orders_count and pending_orders_count > 0 %}
+              <span class="nav-badge badge-warning">{{ pending_orders_count }}</span>
+            {% endif %}
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/support" class="nav-link {% if active_page == 'support' %}active{% endif %}">
+            <span>💬</span> Support Tickets
+            {% if open_tickets_count and open_tickets_count > 0 %}
+              <span class="nav-badge badge-danger">{{ open_tickets_count }}</span>
+            {% endif %}
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/audit" class="nav-link {% if active_page == 'audit' %}active{% endif %}">
+            <span>📜</span> Audit Logs
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+            <span>⚙️</span> Store Settings
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <span class="user-name">{{ request.state.admin_user or 'Administrator' }}</span>
+          <span class="user-role">{{ request.state.admin_role or 'Superadmin' }}</span>
+        </div>
+        <a href="/logout" class="btn btn-secondary btn-sm" title="Log out">🚪 Exit</a>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <header class="top-header">
+        <div class="header-title-box">
+          <button class="mobile-toggle" id="mobileToggle">☰</button>
+          <h1>{% block header_title %}Admin Control Center{% endblock %}</h1>
+        </div>
+        <div class="header-actions">
+          <span style="font-size: 12px; color: var(--text-muted);">Argon2 Protected</span>
+          <a href="/inventory/new" class="btn btn-primary btn-sm">+ New Listing</a>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <!-- Flash Alert Messages -->
+        {% if alert_success %}
+          <div class="alert-box alert-success">
+            <span>✅ {{ alert_success }}</span>
+          </div>
+        {% endif %}
+        {% if alert_error %}
+          <div class="alert-box alert-error">
+            <span>❌ {{ alert_error }}</span>
+          </div>
+        {% endif %}
+        {% if alert_warning %}
+          <div class="alert-box alert-warning">
+            <span>⚠️ {{ alert_warning }}</span>
+          </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/js/admin.js"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

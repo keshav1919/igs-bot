@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{% if item %}Edit {{ item.sku }}{% else %}New Inventory Listing{% endif %}{% endblock %}
+{% block header_title %}{% if item %}Edit Listing: {{ item.sku }}{% else %}Create New Listing{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 850px; margin: 0 auto;">
+  <div class="card-header">
+    <span class="card-title">{% if item %}Update Inventory Item{% else %}New Inventory Item{% endif %}</span>
+    <a href="/inventory" class="btn btn-secondary btn-sm">&larr; Back to Inventory</a>
+  </div>
+  <div class="card-body">
+    <form method="POST" action="{% if item %}/inventory/{{ item.id }}/edit{% else %}/inventory/new{% endif %}">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label">SKU (Stock Keeping Unit) *</label>
+          <input type="text" name="sku" class="form-control" value="{{ item.sku if item else '' }}" required placeholder="e.g. KEY-DAY1-001" {% if item %}readonly style="opacity: 0.7;"{% endif %}>
+          <small style="font-size: 11px; color: var(--text-subtle);">Unique inventory identifier.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Category *</label>
+          <select name="category_id" class="form-control" required>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}" {% if item and item.category_id == cat.id %}selected{% endif %}>
+                {{ cat.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Listing Title *</label>
+        <input type="text" name="title" class="form-control" value="{{ item.title if item else '' }}" required placeholder="e.g. Official Premium Cloud License">
+      </div>
+
+      <!-- Configurable Day-Based Grouping -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label">Day Grouping (Age/Batch) *</label>
+          <select name="day_group" class="form-control" required>
+            {% for dg in configured_day_groups %}
+              <option value="{{ dg }}" {% if item and item.day_group == dg %}selected{% endif %}>{{ dg }}</option>
+            {% endfor %}
+          </select>
+          <small style="font-size: 11px; color: var(--text-subtle);">Day 1 through Day 10 categorization.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Price *</label>
+          <input type="number" step="0.01" name="price" class="form-control" value="{{ item.price if item else '0' }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Currency *</label>
+          <input type="text" name="currency" class="form-control" value="{{ item.currency if item else default_currency }}" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Original Creation / Batch Timestamp (UTC)</label>
+        <input type="datetime-local" name="created_at_str" class="form-control" value="{{ item.created_at.strftime('%Y-%m-%dT%H:%M') if item and item.created_at else '' }}">
+        <small style="font-size: 11px; color: var(--text-muted);">
+          Stored timestamp used to calculate legitimate age (Day 1 through Day 10). Leave blank to use current time.
+          {% if item %}
+            (Current age: <strong>{{ item.age_days }} day(s)</strong> &bull; Dynamically Calculated: <span class="badge badge-day">{{ item.calculated_day_group }}</span>)
+          {% endif %}
+        </small>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label">Quantity in Stock *</label>
+          <input type="number" name="quantity" class="form-control" value="{{ item.quantity if item else '0' }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Stock Alert Threshold *</label>
+          <input type="number" name="stock_alert_threshold" class="form-control" value="{{ item.stock_alert_threshold if item else '5' }}" required>
+          <small style="font-size: 11px; color: var(--text-subtle);">Triggers warning when &le; this level.</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Listing Status *</label>
+          <select name="status" class="form-control" required>
+            <option value="active" {% if item and item.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="paused" {% if item and item.status == 'paused' %}selected{% endif %}>Paused</option>
+            <option value="out_of_stock" {% if item and item.status == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
+            <option value="archived" {% if item and item.status == 'archived' %}selected{% endif %}>Archived</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Public Listing Description</label>
+        <textarea name="description" class="form-control" placeholder="Visible to customers in Telegram bot">{{ item.description if item and item.description else '' }}</textarea>
+      </div>
+
+      <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <label class="form-label" style="color: var(--accent-cyan);">
+          🔐 Deliverable Fulfillment Payload (Secure Delivery)
+        </label>
+        <textarea name="fulfillment_payload" class="form-control" placeholder="License keys, access voucher strings, credentials or delivery instructions released ONLY upon verified payment.">{{ item.fulfillment_payload if item and item.fulfillment_payload else '' }}</textarea>
+        <small style="font-size: 11px; color: var(--text-muted);">
+          ⚠️ This payload is completely protected and released to customer Telegram chat ONLY after an authorized admin verifies payment.
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Internal Admin Notes (Private)</label>
+        <textarea name="internal_notes" class="form-control" placeholder="Supplier info, batch origin, restock schedule (hidden from customers)">{{ item.internal_notes if item and item.internal_notes else '' }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <div>
+          {% if item %}
+            <button type="button" onclick="if(confirm('Are you sure you want to delete this listing?')) document.getElementById('deleteForm').submit();" class="btn btn-danger btn-sm">
+              🗑️ Delete Listing
+            </button>
+          {% endif %}
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <a href="/inventory" class="btn btn-secondary">Cancel</a>
+          <button type="submit" class="btn btn-primary">
+            {% if item %}💾 Save Changes{% else %}✨ Create Listing{% endif %}
+          </button>
+        </div>
+      </div>
+    </form>
+
+    {% if item %}
+      <form id="deleteForm" method="POST" action="/inventory/{{ item.id }}/delete" style="display: none;">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

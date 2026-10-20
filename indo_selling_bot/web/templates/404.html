@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 - Page Not Found | Indo Commerce Admin</title>
+  <link rel="stylesheet" href="/static/css/dark_theme.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #111827 0%, #0b0f19 100%);
+      margin: 0;
+      padding: 20px;
+    }
+    .error-card {
+      width: 100%;
+      max-width: 480px;
+      padding: 40px 32px;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    .error-icon {
+      font-size: 54px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+    .error-code {
+      font-size: 48px;
+      font-weight: 800;
+      color: var(--accent-primary);
+      margin: 0 0 8px 0;
+      line-height: 1;
+    }
+    .error-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .error-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+      line-height: 1.5;
+    }
+    .error-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-card">
+    <div class="error-icon">🔍</div>
+    <div class="error-code">404</div>
+    <div class="error-title">Page or Listing Not Found</div>
+    <div class="error-desc">
+      {{ detail or 'The resource you are looking for does not exist, has been removed, or is temporarily unavailable.' }}
+    </div>
+    <div class="error-actions">
+      <a href="/dashboard" class="btn btn-primary">Return to Dashboard</a>
+      <a href="javascript:history.back()" class="btn btn-secondary">Go Back</a>
+    </div>
+  </div>
+</body>
+</html>

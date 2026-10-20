@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Order {{ order.order_code }}{% endblock %}
+{% block header_title %}Order Review: {{ order.order_code }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <div>
+    <h2 style="font-size: 18px; font-weight: 700;">Order: {{ order.order_code }}</h2>
+    <span class="badge badge-{{ order.status }}" style="font-size: 13px; padding: 4px 10px; margin-top: 4px;">
+      {{ order.status }}
+    </span>
+  </div>
+  <a href="/orders" class="btn btn-secondary btn-sm">&larr; Back to Orders List</a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start;">
+  <!-- Order Main Information -->
+  <div>
+    <!-- Items Purchased -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Ordered Items</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item Title</th>
+              <th>Day Group</th>
+              <th>Unit Price</th>
+              <th>Quantity</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in order.items %}
+            <tr>
+              <td><span class="code-tag">{{ item.item_sku }}</span></td>
+              <td><strong>{{ item.item_title }}</strong></td>
+              <td><span class="badge badge-day">{{ item.day_group or 'General' }}</span></td>
+              <td>{{ item.unit_price | format_currency(order.currency) }}</td>
+              <td>{{ item.quantity }}</td>
+              <td><strong>{{ item.subtotal | format_currency(order.currency) }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="background: rgba(0, 0, 0, 0.2);">
+              <td colspan="5" style="text-align: right; font-weight: 700;">Total Amount:</td>
+              <td style="font-size: 16px; font-weight: 700; color: var(--accent-primary);">
+                {{ order.total_amount | format_currency(order.currency) }}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- Fulfillment Release Status -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Deliverables &amp; Fulfillment Release</span>
+        {% if order.fulfillment_released %}
+          <span class="badge badge-active">Fulfilled &amp; Released</span>
+        {% else %}
+          <span class="badge badge-warning">Awaiting Verification</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if order.fulfillment_released and order.fulfillment_data %}
+          <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 16px; border-radius: 8px;">
+            <h4 style="color: var(--accent-primary); font-size: 14px; margin-bottom: 8px;">
+              ✅ Deliverables Dispatched to Customer Telegram
+            </h4>
+            <pre style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; font-size: 13px; color: #a7f3d0;">{{ order.fulfillment_data }}</pre>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">
+              Released at: {{ order.fulfillment_sent_at.strftime('%Y-%m-%d %H:%M:%S UTC') if order.fulfillment_sent_at else '-' }} &bull;
+              Verified by Admin: <strong>{{ order.verified_by_admin }}</strong>
+            </div>
+          </div>
+        {% else %}
+          <p style="color: var(--text-muted); font-size: 13px;">
+            🔒 Deliverable payloads and service instructions remain encrypted/hidden until an administrator manually verifies payment.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Verification Action Sidebar -->
+  <div>
+    <!-- Customer Details -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Customer Information</span>
+      </div>
+      <div class="card-body" style="font-size: 13px;">
+        <div style="margin-bottom: 10px;">
+          <span style="color: var(--text-muted);">Telegram User ID:</span><br>
+          <code>{{ order.telegram_user_id }}</code>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <span style="color: var(--text-muted);">Telegram Name:</span><br>
+          <strong>{{ order.telegram_first_name or 'N/A' }}</strong>
+        </div>
+        {% if order.telegram_username %}
+        <div style="margin-bottom: 10px;">
+          <span style="color: var(--text-muted);">Username:</span><br>
+          <a href="https://t.me/{{ order.telegram_username }}" target="_blank">@{{ order.telegram_username }}</a>
+        </div>
+        {% endif %}
+        <div>
+          <span style="color: var(--text-muted);">Order Created:</span><br>
+          <span>{{ order.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submitted Payment Proof & Verification -->
+    <div class="card" style="border: 1px solid var(--accent-cyan);">
+      <div class="card-header" style="background: rgba(6, 182, 212, 0.08);">
+        <span class="card-title" style="color: var(--accent-cyan);">Payment Proof &amp; Verification</span>
+      </div>
+      <div class="card-body">
+        <div style="margin-bottom: 14px;">
+          <span style="font-size: 12px; color: var(--text-muted);">Submitted Transaction Reference:</span>
+          {% if order.tx_reference %}
+            <div style="background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; font-weight: 700; color: #38bdf8; word-break: break-all; margin-top: 4px;">
+              {{ order.tx_reference }}
+            </div>
+          {% else %}
+            <div style="color: var(--accent-amber); font-size: 13px; margin-top: 4px;">
+              ⚠️ Customer has not yet submitted transaction reference.
+            </div>
+          {% endif %}
+        </div>
+
+        {% if order.payment_proof_note %}
+        <div style="margin-bottom: 14px;">
+          <span style="font-size: 12px; color: var(--text-muted);">Customer Note:</span>
+          <div style="font-size: 13px; color: var(--text-main); margin-top: 2px;">{{ order.payment_proof_note }}</div>
+        </div>
+        {% endif %}
+
+        {% if order.status not in ('PAID_VERIFIED', 'CANCELLED', 'FULFILLED') %}
+          <div style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--accent-amber); padding: 10px; font-size: 12px; color: #fde68a; margin-bottom: 18px;">
+            ⚠️ <strong>Verification Policy:</strong> Check your bank statement or crypto explorer for this reference ID. Do not rely on customer screenshot promises.
+          </div>
+
+          <!-- Verify Form -->
+          <form method="POST" action="/orders/{{ order.id }}/verify" style="margin-bottom: 12px;">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label">Verification Note (Optional)</label>
+              <input type="text" name="notes" class="form-control" placeholder="Confirmed on bank portal / TxID validated">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;" onclick="return confirm('Confirm payment verification and release deliverables? This cannot be undone.');">
+              ✅ Verify Payment &amp; Release Goods
+            </button>
+          </form>
+
+          <!-- Reject Form -->
+          <form method="POST" action="/orders/{{ order.id }}/reject">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label">Rejection Reason</label>
+              <input type="text" name="reason" class="form-control" placeholder="Transaction not found / invalid reference" required>
+            </div>
+            <button type="submit" class="btn btn-danger btn-sm" style="width: 100%;" onclick="return confirm('Reject this payment and return stock to inventory?');">
+              ❌ Reject Payment
+            </button>
+          </form>
+        {% else %}
+          <div style="background: rgba(16, 185, 129, 0.15); padding: 12px; border-radius: 6px; font-size: 13px; color: var(--accent-primary);">
+            🔒 Verification Completed by <strong>{{ order.verified_by_admin }}</strong>.
+            {% if order.verification_notes %}
+              <div style="margin-top: 4px; font-size: 12px; color: var(--text-muted);">
+                Note: {{ order.verification_notes }}
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

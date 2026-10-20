@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: indo-selling-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_all.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ADMIN_CHAT_ID
+        sync: false
+      - key: TELEGRAM_ADMIN_USER_ID
+        sync: false
+      - key: DEFAULT_ADMIN_USERNAME
+        value: admin
+      - key: DEFAULT_ADMIN_PASSWORD
+        generateValue: true
+      - key: PAYMENT_UPI_ID
+        value: paytm.s1x87m2@pty
+      - key: DEFAULT_UPI_NAME
+        value: Legend Indo Official
+      - key: DATABASE_URL
+        fromDatabase:
+          name: indo-selling-db
+          property: connectionString
+
+databases:
+  - name: indo-selling-db
+    databaseName: indo_selling
+    user: indo_user
+    plan: free

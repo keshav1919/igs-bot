@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Management{% endblock %}
+{% block header_title %}Inventory &amp; Listings{% endblock %}
+
+{% block content %}
+<!-- Top Toolbar & CSV Actions -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+  <div>
+    <h2 style="font-size: 18px; font-weight: 700;">Inventory Records</h2>
+    <p style="font-size: 13px; color: var(--text-muted);">Manage categories, day-based groupings (Day 1 - Day 10), and stock levels.</p>
+  </div>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <button onclick="openModal('importModal')" class="btn btn-secondary btn-sm">📤 Import CSV</button>
+    <a href="/inventory/export/csv" class="btn btn-secondary btn-sm">📥 Export CSV</a>
+    <a href="/inventory/template/csv" class="btn btn-secondary btn-sm" title="Download formatted template">📄 CSV Template</a>
+    <a href="/inventory/new" class="btn btn-primary btn-sm">+ Add New Item</a>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<form method="GET" action="/inventory" class="filter-bar">
+  <div class="filter-item" style="flex: 1; min-width: 200px;">
+    <input type="text" name="search" class="form-control" placeholder="Search SKU, title or keywords..." value="{{ search or '' }}">
+  </div>
+
+  <div class="filter-item">
+    <select name="category_id" class="form-control" style="width: 170px;">
+      <option value="">All Categories</option>
+      {% for cat in categories %}
+        <option value="{{ cat.id }}" {% if selected_category == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Day-Based Grouping Filter -->
+  <div class="filter-item">
+    <select name="day_group" class="form-control" style="width: 150px;">
+      <option value="">All Day Groups</option>
+      {% for dg in day_groups %}
+        <option value="{{ dg }}" {% if selected_day_group == dg %}selected{% endif %}>{{ dg }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filter-item">
+    <select name="status" class="form-control" style="width: 140px;">
+      <option value="">All Statuses</option>
+      <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+      <option value="paused" {% if selected_status == 'paused' %}selected{% endif %}>Paused</option>
+      <option value="out_of_stock" {% if selected_status == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
+      <option value="archived" {% if selected_status == 'archived' %}selected{% endif %}>Archived</option>
+    </select>
+  </div>
+
+  <div class="filter-item">
+    <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+      <input type="checkbox" name="low_stock" value="true" {% if low_stock_only %}checked{% endif %}>
+      <span style="color: var(--accent-rose); font-weight: 600;">Low Stock Only</span>
+    </label>
+  </div>
+
+  <div class="filter-item">
+    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    <a href="/inventory" class="btn btn-secondary btn-sm">Reset</a>
+  </div>
+</form>
+
+<!-- Inventory Table -->
+<div class="card">
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Listing Title</th>
+          <th>Category</th>
+          <th>Day Group</th>
+          <th>Price</th>
+          <th>Quantity</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if items %}
+          {% for item in items %}
+          <tr>
+            <td><span class="code-tag">{{ item.sku }}</span></td>
+            <td>
+              <strong>{{ item.title }}</strong>
+              {% if item.is_low_stock %}
+                <span style="color: var(--accent-rose); font-size: 11px; margin-left: 4px;">⚠️ Low Stock</span>
+              {% endif %}
+              {% if item.internal_notes %}
+                <div style="font-size: 11px; color: var(--text-muted); font-style: italic;">
+                  Note: {{ item.internal_notes }}
+                </div>
+              {% endif %}
+            </td>
+            <td>{{ item.category.name if item.category else 'General' }}</td>
+            <td>
+              <span class="badge badge-day">{{ item.calculated_day_group }}</span>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                Age: {{ item.age_days }} day(s)
+              </div>
+            </td>
+            <td><strong>{{ item.price | format_currency(item.currency) }}</strong></td>
+            <td>
+              <span style="font-weight: 700; color: {% if item.quantity <= 0 %}var(--accent-rose){% elif item.is_low_stock %}var(--accent-amber){% else %}var(--accent-primary){% endif %};">
+                {{ item.quantity }}
+              </span>
+              <span style="font-size: 11px; color: var(--text-subtle);">/ min {{ item.stock_alert_threshold }}</span>
+            </td>
+            <td><span class="badge badge-{{ item.status }}">{{ item.status }}</span></td>
+            <td style="font-size: 12px; color: var(--text-muted);">
+              <div>{{ item.created_at.strftime('%Y-%m-%d') }}</div>
+              <div style="font-size: 10px; color: var(--text-subtle);">{{ item.created_at.strftime('%H:%M UTC') }}</div>
+            </td>
+            <td>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <form method="POST" action="/inventory/{{ item.id }}/toggle-status" style="display: inline;">
+                  <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                  <button type="submit" class="btn btn-secondary btn-sm" title="{% if item.status == 'active' %}Deactivate / Pause Listing{% else %}Activate Listing{% endif %}">
+                    {% if item.status == 'active' %}⏸️ Pause{% else %}▶️ Activate{% endif %}
+                  </button>
+                </form>
+                <button onclick="openRestockModal('{{ item.id }}', '{{ item.sku }}', {{ item.quantity }})" class="btn btn-secondary btn-sm" title="Quick Restock">
+                  ➕ Restock
+                </button>
+                <a href="/inventory/{{ item.id }}/edit" class="btn btn-secondary btn-sm">Edit</a>
+                <a href="/inventory/{{ item.id }}/history" class="btn btn-secondary btn-sm" title="View Audit Trail">History</a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No inventory listings match your filter criteria.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  <span>Page {{ current_page }} of {{ total_pages }} ({{ total_count }} total records)</span>
+  {% if current_page > 1 %}
+    <a href="?page={{ current_page - 1 }}&search={{ search or '' }}&category_id={{ selected_category or '' }}&day_group={{ selected_day_group or '' }}&status={{ selected_status or '' }}{% if low_stock_only %}&low_stock=true{% endif %}" class="page-btn">&laquo; Prev</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p >= current_page - 3 and p <= current_page + 3 %}
+      <a href="?page={{ p }}&search={{ search or '' }}&category_id={{ selected_category or '' }}&day_group={{ selected_day_group or '' }}&status={{ selected_status or '' }}{% if low_stock_only %}&low_stock=true{% endif %}" class="page-btn {% if p == current_page %}active{% endif %}">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if current_page < total_pages %}
+    <a href="?page={{ current_page + 1 }}&search={{ search or '' }}&category_id={{ selected_category or '' }}&day_group={{ selected_day_group or '' }}&status={{ selected_status or '' }}{% if low_stock_only %}&low_stock=true{% endif %}" class="page-btn">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Import CSV Modal -->
+<div class="modal-backdrop" id="importModal">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3 style="font-size: 16px; font-weight: 700;">Import Inventory CSV</h3>
+      <button class="modal-close" onclick="closeModal('importModal')">&times;</button>
+    </div>
+    <form method="POST" action="/inventory/import/csv" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Upload a valid CSV file. Existing SKUs will be updated with full audit trail logging, and new SKUs will be created automatically.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Select CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" class="form-control" required>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('importModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Start Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Quick Restock Modal -->
+<div class="modal-backdrop" id="restockModal">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3 style="font-size: 16px; font-weight: 700;" id="restockTitle">Quick Restock</h3>
+      <button class="modal-close" onclick="closeModal('restockModal')">&times;</button>
+    </div>
+    <form id="restockForm" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+      <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" id="restockInfo">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Units to Add (Positive Integer) *</label>
+        <input type="number" name="additional_quantity" class="form-control" min="1" value="10" required>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('restockModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Confirm Restock</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function openRestockModal(itemId, sku, currentQty) {
+  document.getElementById("restockTitle").innerText = "Quick Restock: " + sku;
+  document.getElementById("restockInfo").innerText = "Current Stock: " + currentQty + " units. Added units will be logged in the audit history.";
+  document.getElementById("restockForm").action = "/inventory/" + itemId + "/quick-restock";
+  openModal("restockModal");
+}
+</script>
+{% endblock %}

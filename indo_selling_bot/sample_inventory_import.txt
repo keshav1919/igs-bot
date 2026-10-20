@@ -1,0 +1,28 @@
+# ================================================================
+# INDO COMMERCE & INVENTORY SYSTEM - SAMPLE STOCK IMPORT FILE
+# Supported Formats:
+# Format 1: ITEM_ID|CATEGORY|CREATED_AT_UTC|STATUS
+# Format 2: ITEM_ID|CREATED_AT_UTC (Auto-categorized by timestamp age)
+# ================================================================
+
+# Day 1 Old items (< 24 hours old)
+DEMO-D1-1001|DAY_1_OLD|2026-10-19T10:00:00Z|AVAILABLE
+DEMO-D1-1002|DAY_1_OLD|2026-10-19T08:30:00Z|AVAILABLE
+DEMO-D1-1003|2026-10-19T05:15:00Z
+
+# Day 2 Old items (24h to 48h old)
+DEMO-D2-2001|DAY_2_OLD|2026-10-18T10:00:00Z|AVAILABLE
+DEMO-D2-2002|2026-10-18T06:00:00Z
+
+# Day 3 Old items (48h to 72h old)
+DEMO-D3-3001|DAY_3_OLD|2026-10-17T12:00:00Z|AVAILABLE
+DEMO-D3-3002|2026-10-17T09:00:00Z
+
+# Day 5 Old items (96h to 120h old)
+DEMO-D5-5001|2026-10-15T14:00:00Z
+
+# Day 10 Old items (216h to 240h old)
+DEMO-D10-1001|DAY_10_OLD|2026-10-10T12:00:00Z|AVAILABLE
+
+# Day 20 Old items (456h to 480h old)
+DEMO-D20-2001|DAY_20_OLD|2026-09-30T12:00:00Z|AVAILABLE

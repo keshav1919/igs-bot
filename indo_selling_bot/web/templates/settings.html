@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+{% block header_title %}Store &amp; Inventory Settings{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+  <div class="card-header">
+    <span class="card-title">Configurable System Parameters</span>
+  </div>
+  <div class="card-body">
+    <form method="POST" action="/settings">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+      <!-- Day-based grouping configuration -->
+      <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 24px;">
+        <label class="form-label" style="color: var(--accent-primary); font-size: 14px;">
+          📅 Configurable Day-Based Grouping (Comma-separated)
+        </label>
+        <input type="text" name="day_groups" class="form-control" value="{{ day_groups_str }}" required>
+        <small style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 6px;">
+          Configures allowable inventory batch ages/tiers (e.g. <code>Day 1, Day 2, Day 3, Day 4, Day 5, Day 6, Day 7, Day 8, Day 9, Day 10</code>).
+          These groups appear in Telegram bot filters and inventory listing creation.
+        </small>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label">Default Currency</label>
+          <input type="text" name="currency" class="form-control" value="{{ currency }}" required placeholder="IDR">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Global Stock Alert Threshold</label>
+          <input type="number" name="stock_alert_threshold" class="form-control" value="{{ stock_alert_threshold }}" required min="1">
+          <small style="font-size: 11px; color: var(--text-subtle);">Warns when quantity is at or below this value.</small>
+        </div>
+      </div>
+
+      <!-- Payment Channels Configuration -->
+      <div class="form-group" style="margin-top: 16px;">
+        <label class="form-label" style="color: var(--accent-cyan);">
+          💳 Configurable Payment Channels (JSON Configuration)
+        </label>
+        <textarea name="payment_methods_json" class="form-control" style="font-family: monospace; min-height: 180px;" required>{{ payment_methods_json }}</textarea>
+        <small style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 6px;">
+          Valid JSON array defining payment options shown to customers on Telegram (BCA Bank, USDT TRC-20, QRIS, etc.).
+        </small>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <button type="submit" class="btn btn-primary">💾 Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

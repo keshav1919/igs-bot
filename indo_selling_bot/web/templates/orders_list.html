@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Orders Management{% endblock %}
+{% block header_title %}Orders &amp; Payment Verification{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+  <div>
+    <h2 style="font-size: 18px; font-weight: 700;">Customer Orders</h2>
+    <p style="font-size: 13px; color: var(--text-muted);">
+      Authorized verification workflow: Review customer tx references and verify on payment network before releasing goods.
+    </p>
+  </div>
+  <div>
+    <a href="/orders/export/csv" class="btn btn-secondary btn-sm">📥 Export Orders CSV</a>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<form method="GET" action="/orders" class="filter-bar">
+  <div class="filter-item" style="flex: 1; min-width: 200px;">
+    <input type="text" name="search" class="form-control" placeholder="Search Order Code, Tx Reference, or Telegram Username..." value="{{ search or '' }}">
+  </div>
+
+  <div class="filter-item">
+    <select name="status" class="form-control" style="width: 210px;">
+      <option value="">All Statuses</option>
+      <option value="PAYMENT_SUBMITTED" {% if selected_status == 'PAYMENT_SUBMITTED' %}selected{% endif %}>
+        🔍 Needs Verification (Submitted)
+      </option>
+      <option value="PENDING_PAYMENT" {% if selected_status == 'PENDING_PAYMENT' %}selected{% endif %}>
+        ⏳ Pending Payment
+      </option>
+      <option value="PAID_VERIFIED" {% if selected_status == 'PAID_VERIFIED' %}selected{% endif %}>
+        ✅ Paid &amp; Verified
+      </option>
+      <option value="REJECTED" {% if selected_status == 'REJECTED' %}selected{% endif %}>
+        ❌ Rejected
+      </option>
+      <option value="CANCELLED" {% if selected_status == 'CANCELLED' %}selected{% endif %}>
+        🚫 Cancelled
+      </option>
+    </select>
+  </div>
+
+  <div class="filter-item">
+    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    <a href="/orders" class="btn btn-secondary btn-sm">Reset</a>
+  </div>
+</form>
+
+<!-- Orders Table -->
+<div class="card">
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Order Code</th>
+          <th>Customer</th>
+          <th>Total Amount</th>
+          <th>Status</th>
+          <th>Submitted Tx Reference</th>
+          <th>Date (UTC)</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if orders %}
+          {% for ord in orders %}
+          <tr style="{% if ord.status == 'PAYMENT_SUBMITTED' %}background-color: rgba(6, 182, 212, 0.05);{% endif %}">
+            <td>
+              <a href="/orders/{{ ord.id }}" class="code-tag">{{ ord.order_code }}</a>
+            </td>
+            <td>
+              <div>{{ ord.telegram_first_name or 'Customer' }}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">
+                TG ID: <code>{{ ord.telegram_user_id }}</code>
+                {% if ord.telegram_username %} (@{{ ord.telegram_username }}){% endif %}
+              </div>
+            </td>
+            <td><strong>{{ ord.total_amount | format_currency(ord.currency) }}</strong></td>
+            <td><span class="badge badge-{{ ord.status }}">{{ ord.status }}</span></td>
+            <td>
+              {% if ord.tx_reference %}
+                <span class="code-tag" style="color: var(--accent-cyan);">{{ ord.tx_reference }}</span>
+              {% else %}
+                <span style="color: var(--text-subtle);">None</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 12px; color: var(--text-muted);">
+              {{ ord.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </td>
+            <td>
+              <a href="/orders/{{ ord.id }}" class="btn {% if ord.status == 'PAYMENT_SUBMITTED' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                {% if ord.status == 'PAYMENT_SUBMITTED' %}🔍 Verify{% else %}Details{% endif %}
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No orders found matching your filter criteria.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  <span>Page {{ current_page }} of {{ total_pages }} ({{ total_count }} total records)</span>
+  {% if current_page > 1 %}
+    <a href="?page={{ current_page - 1 }}&search={{ search or '' }}&status={{ selected_status or '' }}" class="page-btn">&laquo; Prev</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p >= current_page - 3 and p <= current_page + 3 %}
+      <a href="?page={{ p }}&search={{ search or '' }}&status={{ selected_status or '' }}" class="page-btn {% if p == current_page %}active{% endif %}">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if current_page < total_pages %}
+    <a href="?page={{ current_page + 1 }}&search={{ search or '' }}&status={{ selected_status or '' }}" class="page-btn">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

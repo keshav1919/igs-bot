@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}System Audit Logs{% endblock %}
+{% block header_title %}Audit Trail &amp; Compliance Logs{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <div>
+    <h2 style="font-size: 18px; font-weight: 700;">System Administrative Operations</h2>
+    <p style="font-size: 13px; color: var(--text-muted);">
+      Tamper-evident logs of all payment verifications, logins, inventory updates, and CSV imports.
+    </p>
+  </div>
+  <div>
+    <a href="/audit/export/csv" class="btn btn-secondary btn-sm">📥 Export Audit Logs CSV</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Timestamp (UTC)</th>
+          <th>Action</th>
+          <th>Performed By</th>
+          <th>IP Address</th>
+          <th>Operation Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if logs %}
+          {% for log in logs %}
+          <tr>
+            <td><span class="code-tag">#{{ log.id }}</span></td>
+            <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
+              {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+            </td>
+            <td>
+              <span class="badge {% if 'VERIFY' in log.action %}badge-active{% elif 'REJECT' in log.action %}badge-danger{% elif 'LOGIN' in log.action %}badge-day{% else %}badge-warning{% endif %}">
+                {{ log.action }}
+              </span>
+            </td>
+            <td><strong>{{ log.performed_by }}</strong></td>
+            <td><code>{{ log.ip_address or 'Local' }}</code></td>
+            <td style="font-size: 13px;">{{ log.details or '-' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No audit records logged yet.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  <span>Page {{ current_page }} of {{ total_pages }} ({{ total_count }} total entries)</span>
+  {% if current_page > 1 %}
+    <a href="?page={{ current_page - 1 }}" class="page-btn">&laquo; Prev</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p >= current_page - 3 and p <= current_page + 3 %}
+      <a href="?page={{ p }}" class="page-btn {% if p == current_page %}active{% endif %}">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if current_page < total_pages %}
+    <a href="?page={{ current_page + 1 }}" class="page-btn">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

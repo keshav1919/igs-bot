@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Category Management{% endblock %}
+{% block header_title %}Catalog Categories{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start;">
+  <!-- Categories List -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Existing Categories</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Icon</th>
+            <th>Name</th>
+            <th>Slug</th>
+            <th>Sort</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if categories %}
+            {% for cat in categories %}
+            <tr>
+              <td style="font-size: 20px;">{{ cat.icon }}</td>
+              <td><strong>{{ cat.name }}</strong></td>
+              <td><span class="code-tag">{{ cat.slug }}</span></td>
+              <td>{{ cat.sort_order }}</td>
+              <td>
+                <span class="badge {% if cat.is_active %}badge-active{% else %}badge-archived{% endif %}">
+                  {% if cat.is_active %}Active{% else %}Inactive{% endif %}
+                </span>
+              </td>
+              <td>
+                <form method="POST" action="/categories/{{ cat.id }}/delete" onsubmit="return confirm('Delete category {{ cat.name }}?');" style="display: inline;">
+                  <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">
+                No categories created yet.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add Category Form -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">+ Add New Category</span>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/categories/new">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+        <div class="form-group">
+          <label class="form-label">Category Name *</label>
+          <input type="text" name="name" class="form-control" required placeholder="e.g. Software Licenses">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Slug</label>
+          <input type="text" name="slug" class="form-control" placeholder="auto-generated if empty">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Icon (Emoji) *</label>
+          <input type="text" name="icon" class="form-control" value="📦" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Sort Order</label>
+          <input type="number" name="sort_order" class="form-control" value="0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" placeholder="Brief catalog description"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Create Category</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

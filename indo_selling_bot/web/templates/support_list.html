@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Support Tickets{% endblock %}
+{% block header_title %}Customer Support Desk{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Inbound Support Inquiries</span>
+    <div style="font-size: 13px; color: var(--text-muted);">
+      Replies sent here are automatically forwarded to the customer's Telegram chat.
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Ticket Code</th>
+          <th>Customer</th>
+          <th>Order Code</th>
+          <th>Subject &amp; Message</th>
+          <th>Status</th>
+          <th>Admin Reply</th>
+          <th>Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if tickets %}
+          {% for t in tickets %}
+          <tr>
+            <td><span class="code-tag">{{ t.ticket_code }}</span></td>
+            <td>
+              <div>TG ID: <code>{{ t.telegram_user_id }}</code></div>
+              {% if t.telegram_username %}
+                <div style="font-size: 11px; color: var(--text-muted);">@{{ t.telegram_username }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.order_code %}
+                <a href="/orders?search={{ t.order_code }}" class="code-tag">{{ t.order_code }}</a>
+              {% else %}
+                <span style="color: var(--text-subtle);">-</span>
+              {% endif %}
+            </td>
+            <td style="max-width: 250px;">
+              <strong>{{ t.subject }}</strong>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">{{ t.message }}</div>
+            </td>
+            <td>
+              <span class="badge {% if t.status == 'OPEN' %}badge-danger{% elif t.status == 'REPLIED' %}badge-warning{% else %}badge-active{% endif %}">
+                {{ t.status }}
+              </span>
+            </td>
+            <td style="font-size: 12px; color: var(--accent-primary); max-width: 200px;">
+              {{ t.admin_reply or 'None yet' }}
+            </td>
+            <td style="font-size: 12px; color: var(--text-muted);">{{ t.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+              <button onclick="openReplyModal('{{ t.id }}', '{{ t.ticket_code }}', '{{ t.message | replace("'", "\\'") }}')" class="btn btn-secondary btn-sm">
+                💬 Reply
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No customer support tickets found.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Reply Ticket Modal -->
+<div class="modal-backdrop" id="replyModal">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3 style="font-size: 16px; font-weight: 700;" id="replyModalTitle">Reply to Ticket</h3>
+      <button class="modal-close" onclick="closeModal('replyModal')">&times;</button>
+    </div>
+    <form id="replyTicketForm" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+      <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; font-size: 13px; color: var(--text-muted); margin-bottom: 14px;" id="replyModalMsg">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Admin Response (Will be sent via Telegram Bot)</label>
+        <textarea name="admin_reply" class="form-control" rows="4" required placeholder="Type your response to the customer..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+          <input type="checkbox" name="resolve" value="true" checked>
+          <span>Mark Ticket as Resolved</span>
+        </label>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('replyModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Send Response</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function openReplyModal(ticketId, ticketCode, message) {
+  document.getElementById("replyModalTitle").innerText = "Reply to " + ticketCode;
+  document.getElementById("replyModalMsg").innerText = "Customer inquiry: " + message;
+  document.getElementById("replyTicketForm").action = "/support/" + ticketId + "/reply";
+  openModal("replyModal");
+}
+</script>
+{% endblock %}
