@@ -30,6 +30,9 @@ class ChannelService:
         if not channel:
             return True
 
+        if isinstance(channel, str) and ((channel.startswith("-") and channel[1:].isdigit()) or channel.isdigit()):
+            channel = int(channel)
+
         get_fn = getattr(bot, "get_chat_member", None)
         if not get_fn:
             return True

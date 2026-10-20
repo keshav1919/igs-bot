@@ -100,13 +100,16 @@ class Settings:
         return found
 
     # Force Channel Subscription
-    FORCE_SUB_CHANNEL: str = os.getenv("FORCE_SUB_CHANNEL", os.getenv("CHANNEL_USERNAME", "@LEGEND_TG")).strip()
-    FORCE_SUB_CHANNEL_URL: str = os.getenv("FORCE_SUB_CHANNEL_URL", os.getenv("CHANNEL_URL", "")).strip()
+    FORCE_SUB_CHANNEL: str = os.getenv("FORCE_SUB_CHANNEL", os.getenv("CHANNEL_USERNAME", "-1004483464492")).strip()
+    FORCE_SUB_CHANNEL_URL: str = os.getenv("FORCE_SUB_CHANNEL_URL", os.getenv("CHANNEL_URL", "https://t.me/+IMLxlk2X0tIxNWVl")).strip()
 
     @property
-    def force_channel(self) -> str:
-        """Configured channel username or ID for force subscription."""
-        return os.getenv("FORCE_SUB_CHANNEL", self.FORCE_SUB_CHANNEL).strip()
+    def force_channel(self) -> str | int:
+        """Configured channel username or numeric chat ID for force subscription."""
+        raw = os.getenv("FORCE_SUB_CHANNEL", self.FORCE_SUB_CHANNEL).strip()
+        if (raw.startswith("-") and raw[1:].isdigit()) or raw.isdigit():
+            return int(raw)
+        return raw
 
     @property
     def force_channel_url(self) -> str:
@@ -114,14 +117,14 @@ class Settings:
         url = os.getenv("FORCE_SUB_CHANNEL_URL", self.FORCE_SUB_CHANNEL_URL).strip()
         if url:
             return url
-        ch = self.force_channel
+        ch = str(self.force_channel)
         if ch.startswith("https://") or ch.startswith("http://"):
             return ch
         if ch.startswith("@"):
             return f"https://t.me/{ch[1:]}"
         if ch and not ch.startswith("-"):
             return f"https://t.me/{ch}"
-        return "https://t.me/LEGEND_TG"
+        return "https://t.me/+IMLxlk2X0tIxNWVl"
 
     # Business Timezone & Locale Settings
     BUSINESS_TIMEZONE: str = os.getenv("BUSINESS_TIMEZONE", "Asia/Kolkata")
