@@ -134,24 +134,25 @@ class StockTxtService:
     @classmethod
     def calculate_day_number(cls, created_at: datetime, ref_time: datetime | None = None) -> int:
         """
-        Calculate complete elapsed 24-hour periods from timestamp.
-        Day 1 = < 24h old (0 days completed)
-        Day 2 = 24h to 48h old (1 day completed)
-        ...
-        Day N = (N-1)*24h to N*24h old
+        Calculate day age by calendar date difference in Asia/Kolkata (IST).
+        Matches user's exact specification & old bot:
+        - 18 Oct -> 2 days old (when today is 20 Oct)
+        - 15 Oct -> 5 days old (22 units)
+        - 14 Oct -> 6 days old (339 units)
+        - 13 Oct -> 7 days old (869 units)
+        - 12 Oct -> 8 days old (1002 units)
+        - 11 Oct -> 9 days old (762 units)
         """
-        ref = ref_time or datetime.now(timezone.utc)
-        if ref.tzinfo is None:
-            ref = ref.replace(tzinfo=timezone.utc)
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+        tz = ZoneInfo("Asia/Kolkata")
+        if ref_time:
+            ref_dt = ref_time.astimezone(tz) if ref_time.tzinfo else ref_time.replace(tzinfo=timezone.utc).astimezone(tz)
+        else:
+            ref_dt = datetime.now(timezone.utc).astimezone(tz)
 
-        if created_at > ref:
-            return 1  # Future timestamp protected to Day 1
+        item_dt = created_at.astimezone(tz) if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc).astimezone(tz)
 
-        elapsed_seconds = max(0, int((ref - created_at).total_seconds()))
-        days = elapsed_seconds // 86400
-        return max(1, days + 1)
+        diff_days = (ref_dt.date() - item_dt.date()).days
+        return max(1, diff_days)
 
     @classmethod
     def parse_line(cls, raw_line: str, ref_time: datetime | None = None) -> dict | None:
@@ -346,10 +347,11 @@ class StockTxtService:
                 older_batches.append(batch_info)
 
         categories_summary = []
+        tz = ZoneInfo("Asia/Kolkata")
         for day in range(1, max_days + 1):
             batches = day_buckets[day]
             day_qty = len(batches)
-            dates = sorted({b["created_at"].strftime("%Y-%m-%d") for b in batches})
+            dates = sorted({(b["created_at"].astimezone(tz) if b["created_at"].tzinfo else b["created_at"]).strftime("%Y-%m-%d") for b in batches})
             categories_summary.append({
                 "day": day,
                 "label": "1 day old" if day == 1 else f"{day} days old",

@@ -7,6 +7,7 @@ Enforces:
 - Never exposes private inventory payloads or credentials.
 """
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -20,8 +21,8 @@ def _format_stock_summary(summary: dict) -> str:
     Format live inventory summary as an ASCII table matching user specification.
     Only displays days that have stock > 0.
     """
-    now = datetime.now(timezone.utc)
-    today = now.date()
+    tz = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(tz).date()
 
     rows = []
     for cat in summary.get("categories", []):
@@ -34,9 +35,9 @@ def _format_stock_summary(summary: dict) -> str:
             try:
                 dt = datetime.strptime(cat["dates"][0], "%Y-%m-%d").date()
             except Exception:
-                dt = today - timedelta(days=day_num - 1)
+                dt = today - timedelta(days=day_num)
         else:
-            dt = today - timedelta(days=day_num - 1)
+            dt = today - timedelta(days=day_num)
 
         diff_days = (today - dt).days
         if diff_days <= 0:
@@ -45,7 +46,6 @@ def _format_stock_summary(summary: dict) -> str:
             period = "1 day old"
         else:
             period = f"{diff_days} days old"
-
         date_str = dt.strftime("%d %b")
         rows.append(f"│ {period:<12} │ {date_str:<7} │ {qty:>5} │")
 
