@@ -4,8 +4,42 @@ Includes customer 4-button persistent reply keyboard, 20 age-category inline but
 deposit actions, and administrator management keyboards.
 """
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from indo_selling_bot.config import settings
 from indo_selling_bot.models.category import Category
 from indo_selling_bot.models.inventory import InventoryItem
+
+CHANNEL_VERIFICATION_TEXT = (
+    "<b>Oii Chanel join kr chup Chap 🫵</b>\n"
+    "================"
+)
+
+def get_channel_verification_keyboard() -> InlineKeyboardMarkup:
+    """
+    Inline keyboard for channel verification:
+    - Join Chanel (green/success style)
+    - Verify (blue/primary style)
+    - Free Indo ig (blue/primary style)
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Join Chanel", url=settings.force_channel_url, style="success"),
+            InlineKeyboardButton(text="Verify", callback_data="verify_channel", style="primary"),
+        ],
+        [
+            InlineKeyboardButton(text="Free Indo ig", callback_data="claim_free_ig", style="primary")
+        ]
+    ])
+
+def get_start_welcome_keyboard() -> InlineKeyboardMarkup:
+    """
+    Main welcome keyboard on /start:
+    - 🛒 Buy Indo (green/success)
+    - Free Indo ig (blue/primary)
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success")],
+        [InlineKeyboardButton(text="Free Indo ig", callback_data="claim_free_ig", style="primary")]
+    ])
 
 def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     """

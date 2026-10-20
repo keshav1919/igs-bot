@@ -99,6 +99,30 @@ class Settings:
         found.add(5344918305)
         return found
 
+    # Force Channel Subscription
+    FORCE_SUB_CHANNEL: str = os.getenv("FORCE_SUB_CHANNEL", os.getenv("CHANNEL_USERNAME", "@LEGEND_TG")).strip()
+    FORCE_SUB_CHANNEL_URL: str = os.getenv("FORCE_SUB_CHANNEL_URL", os.getenv("CHANNEL_URL", "")).strip()
+
+    @property
+    def force_channel(self) -> str:
+        """Configured channel username or ID for force subscription."""
+        return os.getenv("FORCE_SUB_CHANNEL", self.FORCE_SUB_CHANNEL).strip()
+
+    @property
+    def force_channel_url(self) -> str:
+        """Direct link to channel for users to join."""
+        url = os.getenv("FORCE_SUB_CHANNEL_URL", self.FORCE_SUB_CHANNEL_URL).strip()
+        if url:
+            return url
+        ch = self.force_channel
+        if ch.startswith("https://") or ch.startswith("http://"):
+            return ch
+        if ch.startswith("@"):
+            return f"https://t.me/{ch[1:]}"
+        if ch and not ch.startswith("-"):
+            return f"https://t.me/{ch}"
+        return "https://t.me/LEGEND_TG"
+
     # Business Timezone & Locale Settings
     BUSINESS_TIMEZONE: str = os.getenv("BUSINESS_TIMEZONE", "Asia/Kolkata")
 

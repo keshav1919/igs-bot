@@ -13,6 +13,7 @@ from indo_selling_bot.models.audit import AuditLog
 from indo_selling_bot.models.wallet import Customer, Wallet, WalletTransaction, DepositRequest
 from indo_selling_bot.models.import_history import StockImportHistory
 from indo_selling_bot.models.pricing import CategoryPrice, PriceChangeLog
+from indo_selling_bot.models.free_claim import FreeClaim
 
 __all__ = [
     "Base",
@@ -32,5 +33,6 @@ __all__ = [
     "StoreSetting",
     "AuditLog",
     "CategoryPrice",
-    "PriceChangeLog"
+    "PriceChangeLog",
+    "FreeClaim"
 ]

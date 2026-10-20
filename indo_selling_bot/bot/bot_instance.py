@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from indo_selling_bot.config import settings
+from indo_selling_bot.bot.middlewares import ForceSubscriptionMiddleware
 from indo_selling_bot.bot.handlers.start import start_router
 from indo_selling_bot.bot.handlers.buy_indo import buy_indo_router
 from indo_selling_bot.bot.handlers.total_stock import total_stock_router
@@ -22,6 +23,10 @@ logger = logging.getLogger("bot")
 def setup_bot_and_dispatcher() -> tuple[Bot | None, Dispatcher]:
     """Create and configure the aiogram Bot and Dispatcher with all routers."""
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Register channel verification middleware
+    dp.message.middleware(ForceSubscriptionMiddleware())
+    dp.callback_query.middleware(ForceSubscriptionMiddleware())
 
     # Include core commerce routers
     dp.include_router(start_router)
