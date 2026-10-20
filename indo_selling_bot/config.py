@@ -34,6 +34,32 @@ class Settings:
     DATABASE_PATH: Path = BASE_DIR / "indo_selling.db"
 
     @property
+    def STOCK_FILE_PATH(self) -> Path:
+        data_dir = os.getenv("DATA_DIR", "")
+        if data_dir and Path(data_dir).exists():
+            return Path(data_dir) / "stock.txt"
+        cand = BASE_DIR / "stock.txt"
+        if cand.exists():
+            return cand
+        cand_parent = BASE_DIR.parent / "stock.txt"
+        if cand_parent.exists():
+            return cand_parent
+        return cand
+
+    @property
+    def SOLD_FILE_PATH(self) -> Path:
+        data_dir = os.getenv("DATA_DIR", "")
+        if data_dir and Path(data_dir).exists():
+            return Path(data_dir) / "sold.txt"
+        cand = BASE_DIR / "sold.txt"
+        if cand.exists():
+            return cand
+        cand_parent = BASE_DIR.parent / "sold.txt"
+        if cand_parent.exists():
+            return cand_parent
+        return cand
+
+    @property
     def DATABASE_URL(self) -> str:
         raw = os.getenv("DATABASE_URL", "").strip()
         if not raw:

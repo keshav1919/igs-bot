@@ -28,18 +28,19 @@ def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
 def get_available_buy_categories_keyboard(available_categories: list[dict]) -> InlineKeyboardMarkup:
     """
     Display ONLY categories with genuine available stock.
-    Hides empty categories (Day 1 Old through Day 20 Old).
-    Shows only the day-old label without stock count on the button.
+    Hides empty categories.
+    Shows green indicator and '1 day old' / 'N days old' format.
     """
     rows = []
     current_row = []
     for cat in available_categories:
         day = cat["day"]
+        label = "1 day old" if day == 1 else f"{day} days old"
         current_row.append(
             InlineKeyboardButton(
-                text=f"📅 Day {day} Old",
+                text=f"🟢 {label}",
                 callback_data=f"buy_day:{day}",
-                style="primary"
+                style="success"
             )
         )
         if len(current_row) == 2:

@@ -7,7 +7,9 @@ Enforces:
 - Zero price rejection unless explicitly enabled for free items.
 - Negative price rejection.
 - Audit logging of all price changes with admin ID, previous price, new price, and timestamp.
+- In-memory pricing cache for high performance.
 """
+import time
 from datetime import datetime, timezone
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,22 +22,41 @@ class PricingService:
     DEFAULT_CURRENCY = "INR"
     DEFAULT_BASE_PRICE = 7.0
 
-    @staticmethod
-    async def get_global_price(db: AsyncSession) -> float:
+    # In-memory pricing cache for high performance
+    _price_cache: dict[int, tuple[float, str]] = {}
+    _global_price_cache: float | None = None
+    _cache_timestamp: float = 0.0
+    CACHE_TTL: float = 300.0
+
+    @classmethod
+    def invalidate_cache(cls) -> None:
+        cls._price_cache.clear()
+        cls._global_price_cache = None
+        cls._cache_timestamp = 0.0
+
+    @classmethod
+    async def get_global_price(cls, db: AsyncSession) -> float:
         """Fetch the store-wide default price for all Indo Igs (Days 1 to infinity)."""
+        now = time.monotonic()
+        if cls._global_price_cache is not None and (now - cls._cache_timestamp) < cls.CACHE_TTL:
+            return cls._global_price_cache
+
         stmt = select(StoreSetting).where(StoreSetting.key == "global_indo_price")
         try:
             setting = (await db.execute(stmt)).scalar_one_or_none()
             if setting and setting.value:
                 val = float(setting.value)
                 if val > 0:
+                    cls._global_price_cache = val
+                    cls._cache_timestamp = now
                     return val
         except Exception:
             pass
-        return PricingService.DEFAULT_BASE_PRICE
+        return cls.DEFAULT_BASE_PRICE
 
-    @staticmethod
+    @classmethod
     async def set_global_price(
+        cls,
         db: AsyncSession,
         new_price: float,
         admin_id: int,
@@ -45,6 +66,7 @@ class PricingService:
         if new_price <= 0:
             return False, "Price must be greater than 0."
 
+        cls.invalidate_cache()
         clean_price = float(round(new_price, 2))
         now_utc = datetime.now(timezone.utc)
 
@@ -82,14 +104,15 @@ class PricingService:
         await db.commit()
         return True, f"Global price for all Indo Igs successfully updated to ₹{clean_price:,.0f}."
 
-    @staticmethod
-    async def get_category_price(db: AsyncSession, day_number: int) -> CategoryPrice | None:
+    @classmethod
+    async def get_category_price(cls, db: AsyncSession, day_number: int) -> CategoryPrice | None:
         """Fetch the pricing record for a specific day category."""
         stmt = select(CategoryPrice).where(CategoryPrice.day_number == day_number)
         return (await db.execute(stmt)).scalar_one_or_none()
 
-    @staticmethod
+    @classmethod
     async def get_effective_price(
+        cls,
         db: AsyncSession,
         day_number: int,
         fallback_price: float | None = None,
@@ -97,13 +120,17 @@ class PricingService:
     ) -> tuple[float, str]:
         """
         Get the effective unit price and currency for a category.
-        1. If a CategoryPrice record exists and is active, returns its price.
-        2. If global_indo_price is configured in store_settings, returns it.
-        3. Otherwise falls back to provided fallback_price (or DEFAULT_BASE_PRICE 7.0).
+        Uses in-memory cache to avoid repeated SQL queries on frequent button taps.
         """
-        rec = await PricingService.get_category_price(db, day_number)
+        now = time.monotonic()
+        if day_number in cls._price_cache and (now - cls._cache_timestamp) < cls.CACHE_TTL:
+            return cls._price_cache[day_number]
+
+        rec = await cls.get_category_price(db, day_number)
         if rec and rec.is_active:
-            return float(rec.price), rec.currency
+            res = (float(rec.price), rec.currency)
+            cls._price_cache[day_number] = res
+            return res
 
         # Check if store_settings has configured global price
         stmt = select(StoreSetting).where(StoreSetting.key == "global_indo_price")
@@ -112,24 +139,30 @@ class PricingService:
             if setting and setting.value:
                 val = float(setting.value)
                 if val > 0:
-                    return val, fallback_currency
+                    res = (val, fallback_currency)
+                    cls._price_cache[day_number] = res
+                    return res
         except Exception:
             pass
 
         if fallback_price is not None:
-            return float(fallback_price), fallback_currency
+            res = (float(fallback_price), fallback_currency)
+            cls._price_cache[day_number] = res
+            return res
 
-        return PricingService.DEFAULT_BASE_PRICE, fallback_currency
+        res = (cls.DEFAULT_BASE_PRICE, fallback_currency)
+        cls._price_cache[day_number] = res
+        return res
 
-    @staticmethod
-    async def get_all_category_prices(db: AsyncSession, max_days: int = 20) -> list[dict]:
+    @classmethod
+    async def get_all_category_prices(cls, db: AsyncSession, max_days: int = 20) -> list[dict]:
         """
         Get the price for every category from Day 1 to Day max_days.
         Returns a list of dicts with day, label, price, currency, updated_at, updated_by.
         """
         stmt = select(CategoryPrice).order_by(CategoryPrice.day_number)
         existing = {cp.day_number: cp for cp in (await db.execute(stmt)).scalars().all()}
-        global_price = await PricingService.get_global_price(db)
+        global_price = await cls.get_global_price(db)
 
         results = []
         for day in range(1, max_days + 1):
@@ -152,7 +185,7 @@ class PricingService:
                     "day": day,
                     "label": day_label,
                     "price": global_price,
-                    "currency": PricingService.DEFAULT_CURRENCY,
+                    "currency": cls.DEFAULT_CURRENCY,
                     "allow_free": False,
                     "is_active": True,
                     "updated_at": None,
@@ -161,8 +194,9 @@ class PricingService:
                 })
         return results
 
-    @staticmethod
+    @classmethod
     async def set_category_price(
+        cls,
         db: AsyncSession,
         day_number: int,
         new_price: float,
@@ -173,11 +207,6 @@ class PricingService:
     ) -> tuple[bool, str, CategoryPrice | None]:
         """
         Update or initialize the price for a specific day category.
-        Validation:
-        - 1 <= day_number <= 20
-        - new_price >= 0 (strictly reject negative prices)
-        - new_price > 0 unless allow_free is True
-        - Logs to PriceChangeLog and AuditLog
         """
         if not (1 <= day_number <= 20):
             return False, f"Invalid day category {day_number}. Must be between 1 and 20.", None
@@ -188,13 +217,14 @@ class PricingService:
         if new_price == 0 and not allow_free:
             return False, "Price cannot be zero unless free items are explicitly enabled.", None
 
+        cls.invalidate_cache()
         now_utc = datetime.now(timezone.utc)
         clean_price = float(round(new_price, 2))
 
         stmt = select(CategoryPrice).where(CategoryPrice.day_number == day_number)
         cp = (await db.execute(stmt)).scalar_one_or_none()
 
-        old_price = float(cp.price) if cp else await PricingService.get_global_price(db)
+        old_price = float(cp.price) if cp else await cls.get_global_price(db)
         day_label = f"Day {day_number} Old"
 
         if not cp:
@@ -243,8 +273,9 @@ class PricingService:
         await db.refresh(cp)
         return True, f"Successfully updated {day_label} price to {currency} {clean_price:,.0f}.", cp
 
-    @staticmethod
+    @classmethod
     async def get_price_history(
+        cls,
         db: AsyncSession,
         day_number: int | None = None,
         limit: int = 20

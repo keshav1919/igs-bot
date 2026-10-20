@@ -113,6 +113,7 @@ async def handle_help(message: Message) -> None:
 @start_router.callback_query(F.data == "back_to_main")
 async def handle_back_to_main_callback(query: CallbackQuery) -> None:
     """Callback returning customer to main dashboard message."""
+    await query.answer()
     user = query.from_user
     user_id = user.id if user else 0
 
@@ -134,7 +135,6 @@ async def handle_back_to_main_callback(query: CallbackQuery) -> None:
         [InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success")]
     ])
 
-    await query.answer()
     if query.message:
         try:
             await query.message.edit_text(

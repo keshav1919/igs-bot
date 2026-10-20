@@ -80,7 +80,7 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
-    inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id", ondelete="RESTRICT"), nullable=False, index=True)
+    inventory_item_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
     
     item_title: Mapped[str] = mapped_column(String(200), nullable=False)
     item_sku: Mapped[str] = mapped_column(String(64), nullable=False)

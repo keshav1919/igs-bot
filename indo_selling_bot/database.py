@@ -42,6 +42,9 @@ async def init_db() -> None:
             await conn.exec_driver_sql("PRAGMA foreign_keys = ON;")
             await conn.exec_driver_sql("PRAGMA journal_mode = WAL;")
             await conn.exec_driver_sql("PRAGMA synchronous = NORMAL;")
+            await conn.exec_driver_sql("PRAGMA cache_size = -64000;")  # 64MB memory cache
+            await conn.exec_driver_sql("PRAGMA temp_store = MEMORY;")
+            await conn.exec_driver_sql("PRAGMA mmap_size = 268435456;") # 256MB memory mapped I/O
         await conn.run_sync(Base.metadata.create_all)
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

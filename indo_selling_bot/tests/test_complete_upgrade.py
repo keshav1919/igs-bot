@@ -136,10 +136,10 @@ async def test_only_available_categories_appear_in_buy_indo(upgrade_db: AsyncSes
     # Test keyboard generation: only buttons for Day 1 and Day 3
     kb = get_available_buy_categories_keyboard(available)
     button_texts = [btn.text for row in kb.inline_keyboard for btn in row]
-    assert any("Day 1 Old" in t for t in button_texts)
-    assert any("Day 3 Old" in t for t in button_texts)
-    assert not any("Day 2 Old" in t for t in button_texts)
-    assert not any("Day 4 Old" in t for t in button_texts)
+    assert any("1 day old" in t.lower() or "day 1 old" in t.lower() for t in button_texts)
+    assert any("3 day" in t.lower() for t in button_texts)
+    assert not any("2 day" in t.lower() for t in button_texts)
+    assert not any("4 day" in t.lower() for t in button_texts)
 
 
 @pytest.mark.asyncio

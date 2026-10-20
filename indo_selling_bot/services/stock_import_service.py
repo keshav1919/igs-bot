@@ -679,10 +679,11 @@ class StockImportService:
             await db.commit()
 
             try:
-                from indo_selling_bot.services.stock_file_service import StockFileService
-                await StockFileService.sync_live_stock_txt(db)
+                from indo_selling_bot.services.stock_txt_service import StockTxtService
+                lines_to_add = "\n".join(rec.raw_line for rec in preview.valid_records)
+                StockTxtService.add_stock_lines(lines_to_add)
             except Exception as fe:
-                logger.error(f"Failed to sync stock.txt after import: {fe}")
+                logger.error(f"Failed to append to stock.txt after import: {fe}")
 
             # Evict session from memory once committed
             cls.remove_session(session_id)

@@ -35,6 +35,12 @@ logger = logging.getLogger("run_bot")
 
 async def main():
     await init_db()
+    try:
+        from indo_selling_bot.services.stock_txt_service import StockTxtService
+        StockTxtService.get_stock_path()
+        StockTxtService.get_sold_path()
+    except Exception as e:
+        logger.warning(f"[*] Stock txt files initialization: {e}")
 
     bot, dp = setup_bot_and_dispatcher()
     if not bot:
@@ -62,7 +68,11 @@ async def main():
 
     logger.info(f"[*] Starting aiogram 3 polling for bot [{settings.mask_token(settings.TELEGRAM_BOT_TOKEN)}]...")
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot,
+            allowed_updates=dp.resolve_used_update_types(),
+            drop_pending_updates=True
+        )
     except TelegramNetworkError as net_err:
         logger.warning(f"[!] Telegram network connection error: {net_err}. Please check your internet connection.")
     except TelegramAPIError as api_err:

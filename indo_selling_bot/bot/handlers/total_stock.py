@@ -2,6 +2,7 @@
 Total Stock Telegram Flow.
 Displays day-wise inventory summary from Day 1 to Day 20 formatted as a clean ASCII table.
 Enforces:
+- Reads stock directly from stock.txt (source of truth).
 - Days with 0 stock are hidden ("that days have 0 stock dont show them").
 - Never exposes private inventory payloads or credentials.
 """
@@ -10,9 +11,7 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from indo_selling_bot.database import AsyncSessionLocal
-from indo_selling_bot.services.inventory_service import InventoryService
-from indo_selling_bot.config import settings
+from indo_selling_bot.services.stock_txt_service import StockTxtService
 
 total_stock_router = Router()
 
@@ -85,10 +84,8 @@ def _get_stock_actions_keyboard() -> InlineKeyboardMarkup:
 @total_stock_router.message(F.text == "📦 Total Stock")
 @total_stock_router.message(Command("stock"))
 async def handle_total_stock_menu(message: Message) -> None:
-    """Send live day-wise stock summary."""
-    async with AsyncSessionLocal() as db:
-        summary = await InventoryService.get_total_stock_summary(db, max_days=20)
-
+    """Send live day-wise stock summary from stock.txt."""
+    summary = StockTxtService.get_total_stock_summary(max_days=20)
     text = _format_stock_summary(summary)
     await message.answer(
         text,
@@ -98,15 +95,16 @@ async def handle_total_stock_menu(message: Message) -> None:
 
 @total_stock_router.callback_query(F.data == "refresh_total_stock")
 async def handle_refresh_stock_callback(query: CallbackQuery) -> None:
-    """Refresh the live stock display in place."""
-    async with AsyncSessionLocal() as db:
-        summary = await InventoryService.get_total_stock_summary(db, max_days=20)
-
-    text = _format_stock_summary(summary)
+    """Refresh the live stock display in place from stock.txt."""
     await query.answer("Stock refreshed!")
+    summary = StockTxtService.get_total_stock_summary(max_days=20)
+    text = _format_stock_summary(summary)
     if query.message:
-        await query.message.edit_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=_get_stock_actions_keyboard()
-        )
+        try:
+            await query.message.edit_text(
+                text,
+                parse_mode="Markdown",
+                reply_markup=_get_stock_actions_keyboard()
+            )
+        except Exception:
+            pass

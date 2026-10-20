@@ -25,6 +25,7 @@ from indo_selling_bot.models.category import Category
 from indo_selling_bot.models.import_history import StockImportHistory
 from indo_selling_bot.models.order import Order
 from indo_selling_bot.services.inventory_service import InventoryService
+from indo_selling_bot.services.stock_txt_service import StockTxtService
 from indo_selling_bot.services.wallet_service import WalletService
 from indo_selling_bot.services.payment_setting_service import PaymentSettingService
 from indo_selling_bot.services.stock_import_service import StockImportService, ImportPreview, MAX_IMPORT_FILE_SIZE_BYTES
@@ -153,8 +154,7 @@ async def handle_admin_view_stock(query: CallbackQuery) -> None:
         return
 
     await query.answer()
-    async with AsyncSessionLocal() as db:
-        summary = await InventoryService.get_total_stock_summary(db, max_days=20)
+    summary = StockTxtService.get_total_stock_summary(max_days=20)
 
     lines = [
         "📊 *Admin Stock Inspection (Day 1 - Day 20)*",
@@ -580,13 +580,12 @@ async def handle_admin_remove_stock_start(query: CallbackQuery, state: FSMContex
     await state.clear()
     await state.set_state(AdminRemoveStockState.waiting_for_day)
 
-    async with AsyncSessionLocal() as db:
-        summary = await InventoryService.get_total_stock_summary(db, max_days=20)
+    summary = StockTxtService.get_total_stock_summary(max_days=20)
 
     text = (
         "➖ *Remove Stock — Select Category*\n\n"
         "Choose an age category to remove inventory units from:\n"
-        "_Only active, unsold stock will be removed. Records are marked as REMOVED and preserved in audit history._"
+        "_Only active, unsold stock will be removed from stock.txt._"
     )
     if query.message:
         await query.message.edit_text(
@@ -612,9 +611,7 @@ async def handle_admin_remove_day_selected(query: CallbackQuery, state: FSMConte
         await query.answer("Invalid day selection.", show_alert=True)
         return
 
-    async with AsyncSessionLocal() as db:
-        items = await InventoryService.get_items_by_exact_age_day(db, day_number=day_num)
-        available = sum(it.quantity for it in items)
+    available = StockTxtService.get_stock_count_for_day(day_num)
 
     if available <= 0:
         await query.answer(f"⚠️ Day {day_num} Old currently has 0 available units to remove.", show_alert=True)
@@ -709,14 +706,10 @@ async def handle_admin_confirm_remove_stock(query: CallbackQuery, state: FSMCont
     await state.clear()
     await query.answer("Removing stock...", show_alert=False)
 
-    async with AsyncSessionLocal() as db:
-        ok, msg, remaining = await InventoryService.remove_stock_by_category(
-            db=db,
-            day_number=day_num,
-            quantity=qty,
-            admin_id=user_id,
-            reason="Admin manual stock removal"
-        )
+    ok, msg, remaining = StockTxtService.remove_stock_by_day(
+        day_number=day_num,
+        quantity=qty
+    )
 
     if not ok:
         await query.message.edit_text(f"❌ Removal failed: {msg}", reply_markup=get_admin_main_keyboard())
