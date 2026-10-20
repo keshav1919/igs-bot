@@ -236,21 +236,6 @@ async def seed_all() -> None:
         db.add(audit)
 
         await db.commit()
-
-        # 6. Seed baseline stock in stock.txt if empty
-        try:
-            from indo_selling_bot.services.stock_txt_service import StockTxtService
-            if StockTxtService.get_total_stock_count() == 0:
-                print("[+] Seeding sample baseline accounts into stock.txt...")
-                sample_lines = [
-                    "indo_demo01@metamail.store:secret123:user_01:",
-                    "indo_demo02@metamail.store:secret456:user_02:",
-                    "indo_demo03@metamail.store:secret789:user_03:"
-                ]
-                StockTxtService.add_stock_lines("\n".join(sample_lines))
-        except Exception as e:
-            print(f"[*] Note on stock.txt seeding: {e}")
-
         print("[OK] Database seeding completed successfully!")
 
 if __name__ == "__main__":
