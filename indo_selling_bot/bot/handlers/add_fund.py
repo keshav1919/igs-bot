@@ -218,17 +218,12 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
     qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{deposit.reference}.png")
 
     caption = (
-        f"💳 <b>PAYMENT REQUEST:</b> <code>{deposit.reference}</code>\n"
+        f"💰 Amount to Pay: ₹{amount:,.2f}\n\n"
+        "⏳ Status: PENDING PAYMENT\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 <b>Amount to Pay:</b> <code>₹{amount:,.2f}</code>\n"
-        f"🆔 <b>Official UPI ID:</b> <code>{upi_id}</code>\n"
-        f"👤 <b>Payee Name:</b> <code>{payee_name}</code>\n"
-        "⏳ <b>Status:</b> <code>PENDING PAYMENT</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "1. Scan the dynamic QR code above or pay via UPI ID in your UPI app (Paytm, GPay, PhonePe).\n"
-        "2. <b>Send your payment screenshot directly in this chat</b> after completing payment.\n\n"
-        "⚠️ <i>Notice: Submitting a screenshot does not automatically credit money to your wallet. "
-        "Every deposit is manually verified by the administrator against bank records.</i>"
+        "1. Scan the QR code\n"
+        "2. Send your payment screenshot in this chat \n"
+        "3. Use Indo and injoy"
     )
 
     kb = get_deposit_request_keyboard(deposit.reference)

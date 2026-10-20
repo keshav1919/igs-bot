@@ -38,7 +38,7 @@ def get_available_buy_categories_keyboard(available_categories: list[dict]) -> I
         label = "1 day old" if day == 1 else f"{day} days old"
         current_row.append(
             InlineKeyboardButton(
-                text=f"🟢 {label}",
+                text=f"🫟 {label}",
                 callback_data=f"buy_day:{day}",
                 style="success"
             )

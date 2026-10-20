@@ -483,8 +483,14 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
 
         period_label = "1 day old" if day_num == 1 else f"{day_num} days old"
 
-        # Immediately disable button in UI to prevent subsequent clicks
+        # Immediately send waiting loading message
+        loading_msg = None
         if query.message:
+            try:
+                loading_msg = await query.message.answer("⏳ wait for indo igs ...")
+            except Exception:
+                pass
+
             try:
                 await query.message.edit_reply_markup(
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -501,6 +507,11 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
 
         total_cost = int(round(price * qty))
         if wallet_balance < total_cost:
+            if loading_msg:
+                try:
+                    await loading_msg.delete()
+                except Exception:
+                    pass
             await query.answer("❌ Insufficient wallet balance.", show_alert=True)
             if query.message:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -522,6 +533,11 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
         )
 
         if not txt_ok or not purchased_accounts:
+            if loading_msg:
+                try:
+                    await loading_msg.delete()
+                except Exception:
+                    pass
             await query.answer(f"❌ Purchase failed: {txt_msg}", show_alert=True)
             if query.message:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -543,6 +559,11 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
                 item_title=f"{period_label} ({qty} igs)"
             )
             if not deduct_ok:
+                if loading_msg:
+                    try:
+                        await loading_msg.delete()
+                    except Exception:
+                        pass
                 # If wallet deduction failed, put accounts back into stock.txt
                 raw_lines = "\n".join(acc["raw_line"] for acc in purchased_accounts)
                 StockTxtService.add_stock_lines(raw_lines)
@@ -584,15 +605,23 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
 
         await query.answer("✅ Purchase successful!", show_alert=False)
 
-        # 4. Remaining stock for this day
-        remaining_stock = StockTxtService.get_stock_count_for_day(day_num)
-        rem_txt, rem_count = StockTxtService.get_remaining_stock_txt_content(day_number=day_num)
+        # Delete loading message now that data is ready
+        if loading_msg:
+            try:
+                await loading_msg.delete()
+            except Exception:
+                pass
+
+        # 4. Total remaining stock across ALL days
+        total_remaining_stock = StockTxtService.get_total_stock_count()
+        all_rem_txt, total_rem_count = StockTxtService.get_remaining_stock_txt_content(day_number=None)
+        all_summary = StockTxtService.get_total_stock_summary(max_days=20)
 
         # 5. Format client delivery response
         delivery_text = format_delivery_message(
             accounts=purchased_accounts,
             day_number=day_num,
-            remaining_stock=remaining_stock
+            remaining_stock=total_remaining_stock
         )
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -612,7 +641,7 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
                 logger.error(f"Failed to edit message with delivery text: {e}")
                 await query.message.answer(delivery_text, parse_mode="HTML", reply_markup=kb)
 
-        # 6. Notify Administrator with details and attach remaining stock in .txt format
+        # 6. Notify Administrator with total remaining stock of ALL days + attached complete stock file
         now_str = now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
         cust_tag = f"@{user.username}" if user.username else (user.first_name or f"User {user.id}")
 
@@ -620,14 +649,20 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
             "🔔 <b>NEW PURCHASE NOTIFICATION</b>",
             "━━━━━━━━━━━━━━━━━━━━━━",
             f"👤 <b>Customer:</b> {html.escape(cust_tag)} (<code>{user.id}</code>)",
-            f"📦 <b>Category:</b> {period_label}",
-            f"🔢 <b>Total Igs:</b> <code>{qty} igs</code>",
+            f"📦 <b>Category Purchased:</b> {period_label}",
+            f"🔢 <b>Quantity:</b> <code>{qty} igs</code>",
             f"💰 <b>Total Amount:</b> <code>₹{total_cost:,.2f}</code>",
             f"🧾 <b>Order Code:</b> <code>{order_code}</code>",
             f"🕒 <b>Time:</b> <code>{now_str}</code>",
             "━━━━━━━━━━━━━━━━━━━━━━",
-            f"📧 <b>Purchased Accounts ({len(purchased_accounts)}):</b>",
+            f"📊 <b>TOTAL STOCK REMAINING (ALL DAYS):</b> <code>{total_remaining_stock} igs</code>",
         ]
+        for c in all_summary.get("categories", []):
+            if c["quantity"] > 0:
+                admin_lines.append(f"  • {c['label']}: <code>{c['quantity']} igs</code>")
+
+        admin_lines.append("━━━━━━━━━━━━━━━━━━━━━━")
+        admin_lines.append(f"📧 <b>Purchased Accounts ({len(purchased_accounts)}):</b>")
         for idx, acc in enumerate(purchased_accounts, start=1):
             admin_lines.append(f"{idx}. <code>{html.escape(acc['email'])}</code> | Pass: <code>{html.escape(acc['password'])}</code>")
 
@@ -636,10 +671,10 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
         admin_ids = settings.admin_ids
         for admin_chat_id in admin_ids:
             try:
-                if rem_txt:
+                if all_rem_txt:
                     rem_doc = BufferedInputFile(
-                        rem_txt.encode("utf-8"),
-                        filename=f"remaining_stock_day_{day_num}.txt"
+                        all_rem_txt.encode("utf-8"),
+                        filename=f"remaining_stock_all_days_{order_code}.txt"
                     )
                     await query.bot.send_document(
                         chat_id=admin_chat_id,
@@ -650,7 +685,7 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
                 else:
                     await query.bot.send_message(
                         chat_id=admin_chat_id,
-                        text=admin_caption + "\n\nℹ️ <i>No remaining stock left in this category.</i>",
+                        text=admin_caption + "\n\nℹ️ <i>No remaining stock left in inventory.</i>",
                         parse_mode="HTML"
                     )
             except Exception as err:

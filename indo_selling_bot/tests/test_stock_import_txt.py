@@ -53,6 +53,12 @@ from indo_selling_bot.bot.handlers.admin_stock import (
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
+@pytest.fixture(autouse=True)
+def prevent_stock_txt_pollution(monkeypatch):
+    from unittest.mock import MagicMock
+    from indo_selling_bot.services.stock_txt_service import StockTxtService
+    monkeypatch.setattr(StockTxtService, "add_stock_lines", MagicMock(return_value=(0, 0, [])))
+
 @pytest.fixture
 async def import_db():
     engine = create_async_engine(
