@@ -226,6 +226,7 @@ class StockTxtService:
             except Exception:
                 username = parts[2]
 
+        has_explicit_ts = (created_at_dt is not None)
         # Default timestamp if missing: default to 'now' (1 day old)
         if created_at_dt is None:
             created_at_dt = ref
@@ -240,6 +241,7 @@ class StockTxtService:
             "username": username,
             "domain": domain,
             "created_at": created_at_dt,
+            "has_explicit_timestamp": has_explicit_ts,
             "day_number": day_num,
             "label": label,
             "raw_line": clean
@@ -463,29 +465,18 @@ class StockTxtService:
             if not clean or clean.startswith("#") or clean.startswith("//"):
                 continue
 
-            parts = [p.strip() for p in clean.split(":")]
-            if len(parts) < 2:
+            parsed = cls.parse_line(clean)
+            if not parsed or not parsed.get("email") or not parsed.get("password"):
                 errors.append(f"Line {line_idx}: Invalid format (must have email:pass)")
                 skipped_count += 1
                 continue
 
-            email = parts[0]
-            pwd = parts[1]
-            uname = parts[2] if len(parts) >= 3 else ""
-
-            # Check if line already has a valid timestamp
-            has_valid_ts = False
-            if len(parts) >= 4:
-                cand_dt = ":".join(parts[3:]).strip()
-                try:
-                    cls.parse_timestamp(cand_dt)
-                    has_valid_ts = True
-                except Exception:
-                    pass
-
-            if has_valid_ts:
+            if parsed.get("has_explicit_timestamp"):
                 formatted_line = clean
             else:
+                email = parsed["email"]
+                pwd = parsed["password"]
+                uname = parsed.get("username", "")
                 formatted_line = f"{email}:{pwd}:{uname}:{default_time_str}"
 
             lines_to_append.append(formatted_line)

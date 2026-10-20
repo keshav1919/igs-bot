@@ -26,7 +26,6 @@ env/
 indo_selling.db
 
 # Local inventory files contain account credentials
-stock.txt
 sold.txt
 
 # Testing and coverage
