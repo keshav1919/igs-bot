@@ -46,19 +46,38 @@ async def run_web_server():
 async def run_telegram_bot():
     bot, dp = setup_bot_and_dispatcher()
     if not bot:
-        logger.warning("[!] Telegram Bot Token not set. Web Admin will run standalone; Bot polling disabled.")
+        logger.error(
+            f"[!] CRITICAL: Telegram Bot is DISABLED because TELEGRAM_BOT_TOKEN is missing or invalid on Render! "
+            f"Current value: {settings.mask_token(settings.TELEGRAM_BOT_TOKEN)}. "
+            f"Go to Render Dashboard -> Environment and set TELEGRAM_BOT_TOKEN."
+        )
+        app.state.bot_running = False
+        app.state.bot_error = "TELEGRAM_BOT_TOKEN is missing or contains placeholder"
         return
 
     logger.info(f"[*] Starting Telegram Bot polling [{settings.mask_token(settings.TELEGRAM_BOT_TOKEN)}]...")
     try:
+        # Clear any existing webhook so long-polling is never blocked
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("[*] Successfully cleared webhook and dropped pending updates.")
+        except Exception as wh_err:
+            logger.warning(f"[*] Webhook reset note: {wh_err}")
+
+        app.state.bot_running = True
+        app.state.bot_error = None
+
         await dp.start_polling(
             bot,
             allowed_updates=dp.resolve_used_update_types(),
             drop_pending_updates=True
         )
     except Exception as e:
-        logger.warning(f"[!] Telegram Bot polling stopped: {e}. Web Admin continues running.")
+        app.state.bot_running = False
+        app.state.bot_error = str(e)
+        logger.exception(f"[!] FATAL: Telegram Bot polling stopped: {e}. Web Admin continues running.")
     finally:
+        app.state.bot_running = False
         await bot.session.close()
 
 async def main():

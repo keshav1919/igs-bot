@@ -122,10 +122,20 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["Health"])
     @app.get("/health", tags=["Health"])
     async def health_check():
+        is_token_valid, reason = settings.validate_bot_token(settings.TELEGRAM_BOT_TOKEN)
+        bot_running = getattr(app.state, "bot_running", False)
+        bot_error = getattr(app.state, "bot_error", None)
         return {
             "status": "healthy",
             "service": settings.APP_NAME,
-            "version": "2.0.0"
+            "version": "2.0.0",
+            "bot_status": {
+                "polling_active": bot_running,
+                "token_valid": is_token_valid,
+                "token_masked": settings.mask_token(settings.TELEGRAM_BOT_TOKEN),
+                "token_details": reason,
+                "last_error": bot_error
+            }
         }
 
     return app
