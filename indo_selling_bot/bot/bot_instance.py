@@ -29,20 +29,23 @@ def setup_bot_and_dispatcher() -> tuple[Bot | None, Dispatcher]:
     dp.message.middleware(ForceSubscriptionMiddleware())
     dp.callback_query.middleware(ForceSubscriptionMiddleware())
 
-    # Include core commerce routers
-    dp.include_router(start_router)
-    dp.include_router(outlook_router)
-    dp.include_router(buy_indo_router)
-    dp.include_router(total_stock_router)
-    dp.include_router(add_fund_router)
-    dp.include_router(admin_stock_router)
-    dp.include_router(admin_pricing_router)
-
-    # Include backward compatibility routers
-    dp.include_router(catalog_router)
-    dp.include_router(order_router)
-    dp.include_router(my_orders_router)
-    dp.include_router(support_router)
+    # Detach any existing parent bindings before including (prevents RuntimeError on restart)
+    routers = [
+        start_router,
+        outlook_router,
+        buy_indo_router,
+        total_stock_router,
+        add_fund_router,
+        admin_stock_router,
+        admin_pricing_router,
+        catalog_router,
+        order_router,
+        my_orders_router,
+        support_router,
+    ]
+    for r in routers:
+        r._parent_router = None
+        dp.include_router(r)
 
     bot = None
     is_valid, reason = settings.validate_bot_token(settings.TELEGRAM_BOT_TOKEN)

@@ -203,10 +203,11 @@ class OutlookService:
         if count > 0:
             return 0
 
+        base_dir = Path(__file__).resolve().parent.parent
         source_db_candidates = [
             Path("/opt/mybot/bot.db"),
-            BASE_DIR / "bot.db",
-            BASE_DIR.parent / "bot.db",
+            base_dir / "bot.db",
+            base_dir.parent / "bot.db",
             Path(r"C:\Users\kesha\Downloads\outlook-bot-intigration\bot.db"),
         ]
         source_db = None
