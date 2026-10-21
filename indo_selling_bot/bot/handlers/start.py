@@ -43,21 +43,10 @@ async def handle_start(message: Message) -> None:
     is_sub = await ChannelService.is_user_subscribed(message.bot, user_id)
     is_admin = settings.is_admin(user_id)
 
-    # Always ensure the persistent quick access reply keyboard (4-dot grid button) is active
-    try:
-        await message.answer(
-            "⚡ <i>Quick Access Menu:</i>",
-            reply_markup=get_main_reply_keyboard(is_admin=is_admin),
-            parse_mode="HTML"
-        )
-    except Exception:
-        pass
-
     if not is_sub:
         await message.answer(
             CHANNEL_VERIFICATION_TEXT,
-            reply_markup=get_channel_verification_keyboard(),
-            parse_mode="HTML"
+            reply_markup=get_channel_verification_keyboard()
         )
         return
 
@@ -186,16 +175,6 @@ async def handle_back_to_main_callback(query: CallbackQuery) -> None:
                 reply_markup=get_start_welcome_keyboard()
             )
 
-        is_admin = settings.is_admin(user_id)
-        try:
-            await query.message.answer(
-                "⚡ <i>Quick Access Menu:</i>",
-                reply_markup=get_main_reply_keyboard(is_admin=is_admin),
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-
 @start_router.callback_query(F.data == "verify_channel")
 async def handle_verify_channel_callback(query: CallbackQuery) -> None:
     """Check if user joined channel; unlock bot or show warning alert."""
@@ -221,6 +200,7 @@ async def handle_verify_channel_callback(query: CallbackQuery) -> None:
             wallet_balance = await WalletService.get_balance(db, user.id)
             await db.commit()
 
+    is_admin = settings.is_admin(user_id)
     user_name = user.first_name if user and user.first_name else "User"
     welcome_text = (
         f"👋 Welcome Legend Indo Bot, {user_name}\n\n"
@@ -241,16 +221,6 @@ async def handle_verify_channel_callback(query: CallbackQuery) -> None:
                 welcome_text,
                 reply_markup=get_start_welcome_keyboard()
             )
-
-        is_admin = settings.is_admin(user_id)
-        try:
-            await query.message.answer(
-                "⚡ <i>Quick Access Menu:</i>",
-                reply_markup=get_main_reply_keyboard(is_admin=is_admin),
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
 
 @start_router.callback_query(F.data == "claim_free_ig")
 async def handle_claim_free_ig_callback(query: CallbackQuery) -> None:
@@ -283,30 +253,30 @@ async def handle_claim_free_ig_callback(query: CallbackQuery) -> None:
     username = account.get("username", "")
 
     delivery_text = (
-        "🎁 <b>Your Free Indo IG:</b>\n"
+        "🎁 Your Free Indo IG:\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📧 <code>{email}:{password}</code>\n"
+        f"📧 {email}:{password}\n"
     )
     if username:
-        delivery_text += f"👤 <code>{username}</code>\n"
+        delivery_text += f"👤 {username}\n"
     delivery_text += (
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "Enjoy your Indo! 🎉"
     )
 
     if query.message:
-        await query.message.answer(delivery_text, parse_mode="HTML")
+        await query.message.answer(delivery_text)
 
     # Notify admins of claim
     admin_notify = (
-        "🎁 <b>FREE INDO IG CLAIMED</b>\n"
+        "🎁 FREE INDO IG CLAIMED\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 User: @{user.username or 'NoUser'} (<code>{user.id}</code>)\n"
-        f"📧 Account: <code>{email}</code>\n"
+        f"👤 User: @{user.username or 'NoUser'} ({user.id})\n"
+        f"📧 Account: {email}\n"
         "━━━━━━━━━━━━━━━━━━━━━━"
     )
     for admin_id in settings.admin_ids:
         try:
-            await query.bot.send_message(chat_id=admin_id, text=admin_notify, parse_mode="HTML")
+            await query.bot.send_message(chat_id=admin_id, text=admin_notify)
         except Exception:
             pass

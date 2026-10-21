@@ -3,6 +3,8 @@ aiogram 3 Bot and Dispatcher setup and router registration.
 """
 import logging
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from indo_selling_bot.config import settings
@@ -50,7 +52,10 @@ def setup_bot_and_dispatcher() -> tuple[Bot | None, Dispatcher]:
     bot = None
     is_valid, reason = settings.validate_bot_token(settings.TELEGRAM_BOT_TOKEN)
     if is_valid:
-        bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+        bot = Bot(
+            token=settings.TELEGRAM_BOT_TOKEN,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
         logger.info(f"Bot initialized successfully with token [{settings.mask_token(settings.TELEGRAM_BOT_TOKEN)}].")
     else:
         logger.info(f"Bot token not active ({reason}). Polling will run in disabled/demo mode.")

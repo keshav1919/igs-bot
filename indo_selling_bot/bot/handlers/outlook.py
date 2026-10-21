@@ -30,7 +30,8 @@ from indo_selling_bot.bot.keyboards import (
     get_outlook_purchase_success_keyboard,
     get_outlook_inbox_keyboard,
     get_outlook_full_email_keyboard,
-    get_outlook_delete_confirm_keyboard
+    get_outlook_delete_confirm_keyboard,
+    get_outlook_admin_keyboard
 )
 
 logger = logging.getLogger("outlook_handlers")
@@ -160,7 +161,8 @@ async def show_outlook_screen(user_id: int, page: int, message_or_call, edit: bo
         accounts=accounts,
         current_page=page,
         total_pages=total_pages,
-        stock_count=stock_count
+        stock_count=stock_count,
+        is_admin=settings.is_admin(user_id)
     )
 
     if edit and isinstance(message_or_call, CallbackQuery):
@@ -624,3 +626,169 @@ async def handle_outlook_stock_cmd(message: Message):
         f"• Total Sold: <b>{sold}</b>\n"
         f"• Price: <b>₹{OutlookService.PRICE_PER_ACCOUNT:.2f}</b>"
     )
+
+
+# ==========================================
+# OUTLOOK ADMIN PANEL & CONTROLS
+# ==========================================
+
+@outlook_router.message(Command("outlook_admin"))
+@outlook_router.message(Command("admin_outlook"))
+@outlook_router.callback_query(F.data == "admin_outlook_panel")
+async def handle_outlook_admin_panel(event: Message | CallbackQuery):
+    """Admin dashboard for Outlook inventory, sales, and controls."""
+    user_id = event.from_user.id
+    if not settings.is_admin(user_id):
+        if isinstance(event, CallbackQuery):
+            await event.answer("Admin only.", show_alert=True)
+        else:
+            await event.answer("⛔ Access denied.")
+        return
+
+    if isinstance(event, CallbackQuery):
+        await event.answer()
+
+    stock = await OutlookService.get_available_stock_count()
+    sold = await OutlookService.get_sold_stock_count()
+    revenue = sold * OutlookService.PRICE_PER_ACCOUNT
+
+    text = (
+        "👑 <b>Outlook Admin Control Panel</b>\n\n"
+        f"• 📦 Available Stock: <b>{stock}</b> accounts\n"
+        f"• 🛒 Total Sold: <b>{sold}</b> accounts\n"
+        f"• 💰 Price: <b>₹{OutlookService.PRICE_PER_ACCOUNT:.2f}</b>\n"
+        f"• 💵 Total Outlook Revenue: <b>₹{revenue:.2f}</b>\n\n"
+        "<b>Admin Controls:</b>\n"
+        "• Tap <b>➕ Add Outlook Stock</b> to view format & paste lines.\n"
+        "• Tap <b>💳 Add User Balance</b> or send <code>/addbalance &lt;id&gt; &lt;amt&gt;</code>."
+    )
+
+    kb = get_outlook_admin_keyboard()
+    if isinstance(event, CallbackQuery):
+        try:
+            await event.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            await event.message.answer(text, reply_markup=kb)
+    else:
+        await event.answer(text, reply_markup=kb)
+
+
+@outlook_router.callback_query(F.data == "admin_add_stock_prompt")
+async def handle_admin_add_stock_prompt(callback: CallbackQuery):
+    if not settings.is_admin(callback.from_user.id):
+        await callback.answer("Admin only.", show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.answer(
+        "➕ <b>Add Outlook Stock</b>\n\n"
+        "<b>Paste In This Format:</b>\n\n"
+        "<b>1.</b> <code>email|password|token|client_id</code>\n"
+        "<b>2.</b> <code>email|password|token|client_id|recovery@optional.com</code>\n\n"
+        "<i>(Send one or multiple lines in chat to add stock instantly)</i>"
+    )
+
+
+@outlook_router.callback_query(F.data == "admin_add_balance_prompt")
+async def handle_admin_add_balance_prompt(callback: CallbackQuery):
+    if not settings.is_admin(callback.from_user.id):
+        await callback.answer("Admin only.", show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.answer(
+        "💳 <b>Add User Balance</b>\n\n"
+        "Send command:\n"
+        "<code>/addbalance &lt;user_id&gt; &lt;amount&gt;</code>\n\n"
+        f"Example for yourself: <code>/addbalance {callback.from_user.id} 50</code>"
+    )
+
+
+@outlook_router.callback_query(F.data == "admin_view_outlook_stock")
+async def handle_admin_view_outlook_stock(callback: CallbackQuery):
+    if not settings.is_admin(callback.from_user.id):
+        await callback.answer("Admin only.", show_alert=True)
+        return
+    await callback.answer()
+    stock = await OutlookService.get_available_stock_count()
+    sold = await OutlookService.get_sold_stock_count()
+    await callback.message.answer(
+        f"📦 <b>Outlook Stock Overview</b>\n\n"
+        f"• Available Stock: <b>{stock}</b>\n"
+        f"• Total Sold: <b>{sold}</b>\n"
+        f"• Price: <b>₹{OutlookService.PRICE_PER_ACCOUNT:.2f}</b>"
+    )
+
+
+@outlook_router.message(Command("addbalance"))
+async def handle_add_balance_cmd(message: Message):
+    if not settings.is_admin(message.from_user.id):
+        await message.answer("⛔ Admin only.")
+        return
+
+    parts = message.text.split()
+    if len(parts) < 3:
+        await message.answer(
+            "ℹ️ <b>Usage:</b>\n"
+            "<code>/addbalance &lt;user_id&gt; &lt;amount&gt;</code>\n\n"
+            f"Example: <code>/addbalance {message.from_user.id} 50</code>"
+        )
+        return
+
+    try:
+        target_user_id = int(parts[1])
+        amount = float(parts[2])
+    except ValueError:
+        await message.answer("❌ Invalid user ID or amount.")
+        return
+
+    async with AsyncSessionLocal() as db:
+        await WalletService.get_or_create_customer(db, target_user_id, f"user_{target_user_id}", "User")
+        w = await WalletService.get_or_create_wallet(db, target_user_id)
+        w.balance += amount
+        new_bal = w.balance
+        await db.commit()
+
+    await message.answer(
+        f"✅ <b>Balance Added!</b>\n"
+        f"👤 User ID: <code>{target_user_id}</code>\n"
+        f"➕ Added: <b>₹{amount:.2f}</b>\n"
+        f"💰 New Balance: <b>₹{new_bal:.2f}</b>"
+    )
+
+    if target_user_id != message.from_user.id:
+        try:
+            await message.bot.send_message(
+                target_user_id,
+                f"💳 <b>Wallet Credited!</b>\n\n"
+                f"➕ Added: <b>₹{amount:.2f}</b>\n"
+                f"💰 Current Balance: <b>₹{new_bal:.2f}</b>\n\n"
+                "You can now purchase Indo IG accounts or Outlook accounts!"
+            )
+        except Exception:
+            pass
+
+
+@outlook_router.message(Command("setbalance"))
+async def handle_set_balance_cmd(message: Message):
+    if not settings.is_admin(message.from_user.id):
+        await message.answer("⛔ Admin only.")
+        return
+
+    parts = message.text.split()
+    if len(parts) < 3:
+        await message.answer("Usage: <code>/setbalance &lt;user_id&gt; &lt;amount&gt;</code>")
+        return
+
+    try:
+        target_user_id = int(parts[1])
+        amount = float(parts[2])
+    except ValueError:
+        await message.answer("❌ Invalid user ID or amount.")
+        return
+
+    async with AsyncSessionLocal() as db:
+        await WalletService.get_or_create_customer(db, target_user_id, f"user_{target_user_id}", "User")
+        w = await WalletService.get_or_create_wallet(db, target_user_id)
+        w.balance = amount
+        await db.commit()
+
+    await message.answer(f"✅ Set balance for <code>{target_user_id}</code> to <b>₹{amount:.2f}</b>.")

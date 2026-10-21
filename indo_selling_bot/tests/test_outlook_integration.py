@@ -36,10 +36,10 @@ async def prepare_test_db():
 
 @pytest.mark.asyncio
 async def test_quick_access_reply_keyboard_has_persistent_4_dots():
-    """Verify quick access keyboard has is_persistent=True and Outlook beside Buy Indo."""
+    """Verify quick access keyboard has is_persistent=False (to allow toggle open/close) and Outlook beside Buy Indo."""
     kb = get_main_reply_keyboard(is_admin=False)
     assert isinstance(kb, ReplyKeyboardMarkup)
-    assert kb.is_persistent is True
+    assert kb.is_persistent is False
     assert kb.resize_keyboard is True
 
     # Row 1 must have Buy Indo and Outlook side-by-side

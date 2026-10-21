@@ -10,7 +10,7 @@ from indo_selling_bot.models.category import Category
 from indo_selling_bot.models.inventory import InventoryItem
 
 CHANNEL_VERIFICATION_TEXT = (
-    "<b>Oii Chanel join kr chup Chap 🫵</b>\n"
+    "Oii Chanel join kr chup Chap 🫵\n"
     "================"
 )
 
@@ -64,7 +64,7 @@ def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     ]
     if is_admin:
         keyboard.append([KeyboardButton(text="🛡️ Admin Panel")])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=False)
 
 def get_available_buy_categories_keyboard(available_categories: list[dict]) -> InlineKeyboardMarkup:
     """
@@ -211,6 +211,7 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="💳 Pending Payments", callback_data="admin:pending_payments")],
         [InlineKeyboardButton(text="⚠️ Pending Fulfilment", callback_data="admin:pending_fulfillment")],
         [InlineKeyboardButton(text="📜 Import & Transaction History", callback_data="admin:import_history")],
+        [InlineKeyboardButton(text="📩 Outlook Admin Panel", callback_data="admin_outlook_panel")],
         [InlineKeyboardButton(text="🔙 Back to Main Menu", callback_data="admin:back_main")]
     ])
 
@@ -475,7 +476,8 @@ def get_outlook_accounts_keyboard(
     accounts: list[dict],
     current_page: int = 1,
     total_pages: int = 1,
-    stock_count: int = 0
+    stock_count: int = 0,
+    is_admin: bool = False
 ) -> InlineKeyboardMarkup:
     """
     Screen 1: Lists user's purchased Outlook accounts, buy button, and back button.
@@ -516,6 +518,15 @@ def get_outlook_accounts_keyboard(
         )
     ])
 
+    if is_admin:
+        rows.append([
+            InlineKeyboardButton(
+                text="👑 Outlook Admin Panel",
+                callback_data="admin_outlook_panel",
+                style="primary"
+            )
+        ])
+
     # Back to Main Menu
     rows.append([
         InlineKeyboardButton(
@@ -526,6 +537,23 @@ def get_outlook_accounts_keyboard(
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_outlook_admin_keyboard() -> InlineKeyboardMarkup:
+    """Admin panel keyboard for Outlook management."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➕ Add Outlook Stock", callback_data="admin_add_stock_prompt", style="success"),
+            InlineKeyboardButton(text="💳 Add User Balance", callback_data="admin_add_balance_prompt", style="primary"),
+        ],
+        [
+            InlineKeyboardButton(text="📊 Outlook Stock Overview", callback_data="admin_view_outlook_stock", style="primary"),
+        ],
+        [
+            InlineKeyboardButton(text="« Back to Outlook Store", callback_data="outlook_home", style="primary"),
+            InlineKeyboardButton(text="🏠 Bot Admin Panel", callback_data="admin:back_main", style="primary"),
+        ]
+    ])
 
 
 def get_outlook_buy_confirm_keyboard(can_afford: bool = True) -> InlineKeyboardMarkup:
