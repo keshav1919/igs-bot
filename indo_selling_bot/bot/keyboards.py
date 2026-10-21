@@ -3,6 +3,7 @@ Inline and Reply Keyboards for aiogram 3 Telegram Bot.
 Includes customer 4-button persistent reply keyboard, 20 age-category inline buttons,
 deposit actions, and administrator management keyboards.
 """
+from typing import Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from indo_selling_bot.config import settings
 from indo_selling_bot.models.category import Category
