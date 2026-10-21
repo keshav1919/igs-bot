@@ -203,8 +203,18 @@ class OutlookService:
         if count > 0:
             return 0
 
-        source_db = Path(r"C:\Users\kesha\Downloads\outlook-bot-intigration\bot.db")
-        if not source_db.exists():
+        source_db_candidates = [
+            Path("/opt/mybot/bot.db"),
+            BASE_DIR / "bot.db",
+            BASE_DIR.parent / "bot.db",
+            Path(r"C:\Users\kesha\Downloads\outlook-bot-intigration\bot.db"),
+        ]
+        source_db = None
+        for cand in source_db_candidates:
+            if cand.exists():
+                source_db = cand
+                break
+        if not source_db:
             return 0
 
         try:
