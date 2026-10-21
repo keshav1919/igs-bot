@@ -34,10 +34,14 @@ def get_start_welcome_keyboard() -> InlineKeyboardMarkup:
     """
     Main welcome keyboard on /start:
     - 🛒 Buy Indo (green/success)
+    - 📩 Outlook (blue/primary)
     - Free Indo ig (blue/primary)
     """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success")],
+        [
+            InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success"),
+            InlineKeyboardButton(text="📩 Outlook", callback_data="outlook_home", style="primary"),
+        ],
         [InlineKeyboardButton(text="Free Indo ig", callback_data="claim_free_ig", style="primary")]
     ])
 
@@ -46,18 +50,20 @@ def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     Bottom persistent navigation bar.
     Contains customer buttons, plus 1 administrator-only button if caller is admin.
     1. 🛒 Buy Indo
-    2. 📦 Total Stock
-    3. 💰 Add Fund
-    4. 👛 My Wallet
-    5. 🛡️ Admin Panel (only if is_admin is True)
+    2. 📩 Outlook (placed at the side of Buy Indo)
+    3. 📦 Total Stock
+    4. 💰 Add Fund
+    5. 👛 My Wallet
+    6. 🛡️ Admin Panel (only if is_admin is True)
     """
     keyboard = [
-        [KeyboardButton(text="🛒 Buy Indo"), KeyboardButton(text="📦 Total Stock")],
-        [KeyboardButton(text="💰 Add Fund"), KeyboardButton(text="👛 My Wallet")]
+        [KeyboardButton(text="🛒 Buy Indo"), KeyboardButton(text="📩 Outlook")],
+        [KeyboardButton(text="📦 Total Stock"), KeyboardButton(text="💰 Add Fund")],
+        [KeyboardButton(text="👛 My Wallet")]
     ]
     if is_admin:
         keyboard.append([KeyboardButton(text="🛡️ Admin Panel")])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=False)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
 
 def get_available_buy_categories_keyboard(available_categories: list[dict]) -> InlineKeyboardMarkup:
     """
@@ -458,3 +464,230 @@ def get_price_confirmation_keyboard(day_number: int, new_price: float, allow_fre
             InlineKeyboardButton(text="❌ Cancel", callback_data="admin:manage_prices")
         ]
     ])
+
+
+# ==========================================
+# OUTLOOK KEYBOARDS
+# ==========================================
+
+def get_outlook_accounts_keyboard(
+    accounts: list[dict],
+    current_page: int = 1,
+    total_pages: int = 1,
+    stock_count: int = 0
+) -> InlineKeyboardMarkup:
+    """
+    Screen 1: Lists user's purchased Outlook accounts, buy button, and back button.
+    """
+    rows = []
+    # Account buttons
+    for acc in accounts:
+        email = acc["email"]
+        rows.append([
+            InlineKeyboardButton(
+                text=f"📥 {email}",
+                callback_data=f"acc_view:{acc['id']}:1",
+                style="primary"
+            )
+        ])
+
+    # Optional pagination
+    if total_pages > 1:
+        nav = []
+        if current_page > 1:
+            nav.append(InlineKeyboardButton(text="◀️", callback_data=f"acc_page:{current_page - 1}"))
+        else:
+            nav.append(InlineKeyboardButton(text=" ", callback_data="noop"))
+        nav.append(InlineKeyboardButton(text=f"{current_page}/{total_pages}", callback_data="noop"))
+        if current_page < total_pages:
+            nav.append(InlineKeyboardButton(text="▶️", callback_data=f"acc_page:{current_page + 1}"))
+        else:
+            nav.append(InlineKeyboardButton(text=" ", callback_data="noop"))
+        rows.append(nav)
+
+    # Buy Button (Green)
+    buy_text = f"🛒 Buy Outlook — ₹3 (Stock: {stock_count})" if stock_count > 0 else "🛒 Buy Outlook — ₹3 (Out of Stock)"
+    rows.append([
+        InlineKeyboardButton(
+            text=buy_text,
+            callback_data="buy_confirm",
+            style="success"
+        )
+    ])
+
+    # Back to Main Menu
+    rows.append([
+        InlineKeyboardButton(
+            text="« Back to Main Menu",
+            callback_data="back_to_main",
+            style="primary"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_outlook_buy_confirm_keyboard(can_afford: bool = True) -> InlineKeyboardMarkup:
+    """Confirmation modal before purchasing Outlook."""
+    rows = []
+    if can_afford:
+        rows.append([
+            InlineKeyboardButton(
+                text="✅ Confirm & Buy (₹3)",
+                callback_data="buy_execute",
+                style="success"
+            )
+        ])
+    else:
+        rows.append([
+            InlineKeyboardButton(
+                text="💳 Add Funds / Top Up Wallet",
+                callback_data="funds_help",
+                style="success"
+            )
+        ])
+    rows.append([
+        InlineKeyboardButton(
+            text="⬅️ Back",
+            callback_data="outlook_home",
+            style="primary"
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_outlook_purchase_success_keyboard(account_id: int) -> InlineKeyboardMarkup:
+    """Keyboard right after successfully purchasing an Outlook email."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="📩 Open Inbox",
+                callback_data=f"acc_view:{account_id}:1",
+                style="success"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📁 My Accounts",
+                callback_data="outlook_home",
+                style="primary"
+            )
+        ]
+    ])
+
+
+def get_outlook_inbox_keyboard(
+    account_id: int,
+    start_num: int,
+    items_count: int,
+    current_page: int,
+    total_pages: int
+) -> InlineKeyboardMarkup:
+    """
+    Screen 2: Inbox numbers, pagination, refresh, back, and remove/restock.
+    """
+    rows = []
+
+    # Row 1: up to 5 number buttons
+    row1_count = min(items_count, 5)
+    if row1_count > 0:
+        rows.append([
+            InlineKeyboardButton(
+                text=str(start_num + i),
+                callback_data=f"msg_read:{account_id}:{start_num + i - 1}",
+                style="primary"
+            )
+            for i in range(row1_count)
+        ])
+
+    # Row 2: if more than 5 on this page
+    if items_count > 5:
+        rows.append([
+            InlineKeyboardButton(
+                text=str(start_num + i),
+                callback_data=f"msg_read:{account_id}:{start_num + i - 1}",
+                style="primary"
+            )
+            for i in range(5, items_count)
+        ])
+
+    # Pagination row
+    if total_pages > 1:
+        nav = []
+        if current_page > 1:
+            nav.append(InlineKeyboardButton(text="◀️", callback_data=f"inbox_p:{account_id}:{current_page - 1}"))
+        else:
+            nav.append(InlineKeyboardButton(text=" ", callback_data="noop"))
+        nav.append(InlineKeyboardButton(text=f"{current_page}/{total_pages}", callback_data="noop"))
+        if current_page < total_pages:
+            nav.append(InlineKeyboardButton(text="▶️", callback_data=f"inbox_p:{account_id}:{current_page + 1}"))
+        else:
+            nav.append(InlineKeyboardButton(text=" ", callback_data="noop"))
+        rows.append(nav)
+
+    # Refresh (Green) + Back (Blue)
+    rows.append([
+        InlineKeyboardButton(
+            text="🔄",
+            callback_data=f"acc_refresh:{account_id}:{current_page}",
+            style="success"
+        ),
+        InlineKeyboardButton(
+            text="⬅️ Back",
+            callback_data="outlook_home",
+            style="primary"
+        )
+    ])
+
+    # Remove & Restock button (Danger)
+    rows.append([
+        InlineKeyboardButton(
+            text="🗑️ Remove & Restock",
+            callback_data=f"acc_del_ask:{account_id}",
+            style="danger"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_outlook_full_email_keyboard(account_id: int, code: Optional[str] = None) -> InlineKeyboardMarkup:
+    """Screen 3: Full email view with back button and optional code indicator."""
+    rows = []
+    if code and code != "------":
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🔑 Code: {code}",
+                callback_data="noop",
+                style="success"
+            )
+        ])
+    rows.append([
+        InlineKeyboardButton(
+            text="⬅️ Back to Inbox",
+            callback_data=f"acc_view:{account_id}:1",
+            style="primary"
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_outlook_delete_confirm_keyboard(account_id: int) -> InlineKeyboardMarkup:
+    """Confirmation before removing and restocking an email."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🗑️ Confirm Remove & Restock",
+                callback_data=f"acc_del_do:{account_id}",
+                style="danger"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Cancel",
+                callback_data=f"acc_view:{account_id}:1",
+                style="primary"
+            )
+        ]
+    ])
+

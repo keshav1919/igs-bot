@@ -39,8 +39,10 @@ async def main():
         from indo_selling_bot.services.stock_txt_service import StockTxtService
         StockTxtService.get_stock_path()
         StockTxtService.get_sold_path()
+        from indo_selling_bot.services.outlook_service import OutlookService
+        await OutlookService.seed_from_source_db_if_empty()
     except Exception as e:
-        logger.warning(f"[*] Stock txt files initialization: {e}")
+        logger.warning(f"[*] Stock txt files / outlook initialization: {e}")
 
     bot, dp = setup_bot_and_dispatcher()
     if not bot:

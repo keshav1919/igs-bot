@@ -41,6 +41,18 @@ async def handle_start(message: Message) -> None:
 
     # Check channel subscription
     is_sub = await ChannelService.is_user_subscribed(message.bot, user_id)
+    is_admin = settings.is_admin(user_id)
+
+    # Always ensure the persistent quick access reply keyboard (4-dot grid button) is active
+    try:
+        await message.answer(
+            "⚡ <i>Quick Access Menu:</i>",
+            reply_markup=get_main_reply_keyboard(is_admin=is_admin),
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
     if not is_sub:
         await message.answer(
             CHANNEL_VERIFICATION_TEXT,
@@ -174,6 +186,16 @@ async def handle_back_to_main_callback(query: CallbackQuery) -> None:
                 reply_markup=get_start_welcome_keyboard()
             )
 
+        is_admin = settings.is_admin(user_id)
+        try:
+            await query.message.answer(
+                "⚡ <i>Quick Access Menu:</i>",
+                reply_markup=get_main_reply_keyboard(is_admin=is_admin),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
 @start_router.callback_query(F.data == "verify_channel")
 async def handle_verify_channel_callback(query: CallbackQuery) -> None:
     """Check if user joined channel; unlock bot or show warning alert."""
@@ -219,6 +241,16 @@ async def handle_verify_channel_callback(query: CallbackQuery) -> None:
                 welcome_text,
                 reply_markup=get_start_welcome_keyboard()
             )
+
+        is_admin = settings.is_admin(user_id)
+        try:
+            await query.message.answer(
+                "⚡ <i>Quick Access Menu:</i>",
+                reply_markup=get_main_reply_keyboard(is_admin=is_admin),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
 
 @start_router.callback_query(F.data == "claim_free_ig")
 async def handle_claim_free_ig_callback(query: CallbackQuery) -> None:

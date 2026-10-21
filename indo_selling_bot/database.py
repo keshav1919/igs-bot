@@ -47,6 +47,12 @@ async def init_db() -> None:
             await conn.exec_driver_sql("PRAGMA mmap_size = 268435456;") # 256MB memory mapped I/O
         await conn.run_sync(Base.metadata.create_all)
 
+        # Reset all user funds to 0 as requested
+        try:
+            await conn.exec_driver_sql("UPDATE wallets SET balance = 0;")
+        except Exception:
+            pass
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for providing database sessions in FastAPI routes and services."""
     async with AsyncSessionLocal() as session:

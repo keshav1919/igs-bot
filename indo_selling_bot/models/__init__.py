@@ -14,6 +14,7 @@ from indo_selling_bot.models.wallet import Customer, Wallet, WalletTransaction, 
 from indo_selling_bot.models.import_history import StockImportHistory
 from indo_selling_bot.models.pricing import CategoryPrice, PriceChangeLog
 from indo_selling_bot.models.free_claim import FreeClaim
+from indo_selling_bot.models.outlook_account import OutlookAccount
 
 __all__ = [
     "Base",
@@ -34,5 +35,6 @@ __all__ = [
     "AuditLog",
     "CategoryPrice",
     "PriceChangeLog",
-    "FreeClaim"
+    "FreeClaim",
+    "OutlookAccount"
 ]

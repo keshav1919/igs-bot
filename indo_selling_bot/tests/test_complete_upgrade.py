@@ -527,19 +527,21 @@ def test_total_stock_ascii_table_format_and_zero_hiding():
     Days with 0 stock MUST NOT be displayed in table.
     """
     from indo_selling_bot.bot.handlers.total_stock import _format_stock_summary
+    from zoneinfo import ZoneInfo
+    target_dt = datetime.now(ZoneInfo("Asia/Kolkata")).date() - timedelta(days=10)
     summary = {
         "total_stock": 17,
         "categories": [
             {"day": 1, "quantity": 0, "dates": []},
             {"day": 2, "quantity": 0, "dates": []},
-            {"day": 10, "quantity": 17, "dates": ["2026-10-10"]}
+            {"day": 10, "quantity": 17, "dates": [target_dt.strftime("%Y-%m-%d")]}
         ]
     }
     table = _format_stock_summary(summary)
 
     assert "┌──────────────┬─────────┬───────┐" in table
     assert "│ Period       │ Date    │ Stock │" in table
-    assert "│ 10 days old  │ 10 Oct  │    17 │" in table
+    assert f"│ 10 days old  │ {target_dt.strftime('%d %b'):<7} │    17 │" in table
     assert "│ Total                  │    17 │" in table
     assert "└────────────────────────┴───────┘" in table
 

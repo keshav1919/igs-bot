@@ -84,25 +84,27 @@ def test_main_menu_keyboard_customer_view():
     kb = get_main_reply_keyboard(is_admin=False)
     all_buttons = [btn.text for row in kb.keyboard for btn in row]
     assert "🛒 Buy Indo" in all_buttons
+    assert "📩 Outlook" in all_buttons
     assert "📦 Total Stock" in all_buttons
     assert "💰 Add Fund" in all_buttons
     assert "👛 My Wallet" in all_buttons
     assert "📜 My Transactions" not in all_buttons
     assert "🛡️ Admin Panel" not in all_buttons
-    assert len(all_buttons) == 4
+    assert len(all_buttons) == 5
 
 
 def test_main_menu_keyboard_admin_view():
-    """Admin view must display 5 buttons, including 🛡️ Admin Panel."""
+    """Admin view must display 6 buttons, including 🛡️ Admin Panel and 📩 Outlook."""
     kb = get_main_reply_keyboard(is_admin=True)
     all_buttons = [btn.text for row in kb.keyboard for btn in row]
     assert "🛒 Buy Indo" in all_buttons
+    assert "📩 Outlook" in all_buttons
     assert "📦 Total Stock" in all_buttons
     assert "💰 Add Fund" in all_buttons
     assert "👛 My Wallet" in all_buttons
     assert "📜 My Transactions" not in all_buttons
     assert "🛡️ Admin Panel" in all_buttons
-    assert len(all_buttons) == 5
+    assert len(all_buttons) == 6
 
 
 def test_buy_indo_keyboard_contains_exactly_20_days():
