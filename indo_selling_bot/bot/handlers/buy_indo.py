@@ -12,6 +12,7 @@ import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
@@ -117,16 +118,28 @@ def format_delivery_message(accounts: list[dict], day_number: int, remaining_sto
         email_val = acc.get("email", "")
         pass_val = acc.get("password", "")
         cookie_val = acc.get("cookie") or ""
-        lines.append(f"#{idx}")
+
+        created_at_str = acc.get("timestamp_str") or ""
+        if not created_at_str:
+            dt = acc.get("created_at")
+            if isinstance(dt, datetime):
+                tz = ZoneInfo("Asia/Kolkata")
+                dt_ist = dt.astimezone(tz) if dt.tzinfo else dt.replace(tzinfo=timezone.utc).astimezone(tz)
+                created_at_str = dt_ist.strftime("%d %b %Y, %H:%M:%S IST")
+
+        lines.append(f"#{idx}                   ----  Indo ig✅")
         lines.append(f"📧 Email :- <code>{html.escape(email_val)}</code>")
         if uname:
             lines.append(f"🫟 UserName : - <code>{html.escape(uname)}</code>")
         else:
             lines.append("🫟 UserName : - ")
         lines.append(f"🔑 Password : <code>{html.escape(pass_val)}</code>")
-        if cookie_val:
-            lines.append(f"🍪 Cookie : <code>{html.escape(cookie_val)}</code>")
         lines.append("")
+        if cookie_val:
+            lines.append(f"cookie : <code>{html.escape(cookie_val)}</code>")
+        if created_at_str:
+            lines.append(f"🕒 Created at : <code>{html.escape(created_at_str)}</code>")
+        lines.append("━━━━━━━━━━━━━━━━━━")
 
     lines.append("━━━━━━━━━━━━━━━━━━")
     lines.append("📋 Quick Copy:")
@@ -632,9 +645,21 @@ async def handle_execute_batch_buy(query: CallbackQuery) -> None:
                 pass
 
         # 4. Total remaining stock across ALL days
-        total_remaining_stock = StockTxtService.get_total_stock_count()
-        all_rem_txt, total_rem_count = StockTxtService.get_remaining_stock_txt_content(day_number=None)
-        all_summary = StockTxtService.get_total_stock_summary(max_days=20)
+        try:
+            total_remaining_stock = StockTxtService.get_total_stock_count()
+        except Exception as e:
+            logger.error(f"Failed to get total stock count: {e}")
+            total_remaining_stock = len(StockTxtService.read_all_stock())
+
+        try:
+            all_rem_txt, total_rem_count = StockTxtService.get_remaining_stock_txt_content(day_number=None)
+        except Exception:
+            all_rem_txt, total_rem_count = "", total_remaining_stock
+
+        try:
+            all_summary = StockTxtService.get_total_stock_summary(max_days=20)
+        except Exception:
+            all_summary = {}
 
         # 5. Format client delivery response
         delivery_text = format_delivery_message(

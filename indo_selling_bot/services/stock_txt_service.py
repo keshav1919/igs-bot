@@ -236,9 +236,20 @@ class StockTxtService:
                 username = val
 
         has_explicit_ts = (created_at_dt is not None)
+        timestamp_str = ""
+        if ts_idx is not None:
+            timestamp_str = ":".join(parts[ts_idx:]).strip()
+        elif created_at_dt is not None:
+            tz = ZoneInfo("Asia/Kolkata")
+            dt_ist = created_at_dt.astimezone(tz) if created_at_dt.tzinfo else created_at_dt.replace(tzinfo=timezone.utc).astimezone(tz)
+            timestamp_str = dt_ist.strftime("%d %b %Y, %H:%M:%S IST")
+
         # Default timestamp if missing: default to 'now' (1 day old)
         if created_at_dt is None:
             created_at_dt = ref
+            tz = ZoneInfo("Asia/Kolkata")
+            dt_ist = ref.astimezone(tz) if ref.tzinfo else ref.replace(tzinfo=timezone.utc).astimezone(tz)
+            timestamp_str = dt_ist.strftime("%d %b %Y, %H:%M:%S IST")
 
         day_num = cls.calculate_day_number(created_at_dt, ref)
         domain = email.split("@")[-1] if "@" in email else "metamail.store"
@@ -251,6 +262,7 @@ class StockTxtService:
             "cookie": cookie,
             "domain": domain,
             "created_at": created_at_dt,
+            "timestamp_str": timestamp_str,
             "has_explicit_timestamp": has_explicit_ts,
             "day_number": day_num,
             "label": label,
@@ -327,6 +339,11 @@ class StockTxtService:
     def get_stock_count_for_day(cls, day_number: int, ref_time: datetime | None = None) -> int:
         """Count available accounts for a specific day category."""
         return len(cls.get_stock_for_day(day_number, ref_time=ref_time))
+
+    @classmethod
+    def get_total_stock_count(cls, ref_time: datetime | None = None) -> int:
+        """Count total available accounts across all categories in stock.txt."""
+        return len(cls.read_all_stock(ref_time=ref_time))
 
     @classmethod
     def get_total_stock_summary(cls, max_days: int = 20, ref_time: datetime | None = None) -> dict:

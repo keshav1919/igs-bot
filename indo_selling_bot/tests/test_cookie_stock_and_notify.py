@@ -64,13 +64,25 @@ def test_notify_keyboard_and_text():
 
 def test_delivery_message_includes_cookie_and_raw_line():
     account = {
-        "email": "test@outlook.fr",
-        "password": "pwd",
-        "username": "user123",
+        "email": "LemonCaluza350880@outlook.fr",
+        "password": "OkW6tz91AW@",
+        "username": "lemoncaluza350880",
         "cookie": "sessionid=test_cookie_123",
-        "raw_line": "test@outlook.fr:pwd:user123:sessionid=test_cookie_123:22 Oct 2026, 22:23:09 IST",
+        "timestamp_str": "22 Oct 2026, 21:59:17 IST",
+        "raw_line": "LemonCaluza350880@outlook.fr:OkW6tz91AW@:lemoncaluza350880:sessionid=test_cookie_123:22 Oct 2026, 21:59:17 IST",
         "domain": "outlook.fr"
     }
     msg = format_delivery_message([account], day_number=1, remaining_stock=5)
-    assert "🍪 Cookie : <code>sessionid=test_cookie_123</code>" in msg
-    assert "<code>test@outlook.fr:pwd:user123:sessionid=test_cookie_123:22 Oct 2026, 22:23:09 IST</code>" in msg
+    assert "#1                   ----  Indo ig✅" in msg
+    assert "📧 Email :- <code>LemonCaluza350880@outlook.fr</code>" in msg
+    assert "🫟 UserName : - <code>lemoncaluza350880</code>" in msg
+    assert "🔑 Password : <code>OkW6tz91AW@</code>" in msg
+    assert "cookie : <code>sessionid=test_cookie_123</code>" in msg
+    assert "🕒 Created at : <code>22 Oct 2026, 21:59:17 IST</code>" in msg
+    assert "<code>LemonCaluza350880@outlook.fr:OkW6tz91AW@:lemoncaluza350880:sessionid=test_cookie_123:22 Oct 2026, 21:59:17 IST</code>" in msg
+
+
+def test_get_total_stock_count_exists():
+    count = StockTxtService.get_total_stock_count()
+    assert isinstance(count, int)
+    assert count >= 0
