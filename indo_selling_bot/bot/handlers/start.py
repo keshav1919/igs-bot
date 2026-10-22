@@ -251,18 +251,23 @@ async def handle_claim_free_ig_callback(query: CallbackQuery) -> None:
     email = account.get("email", "")
     password = account.get("password", "")
     username = account.get("username", "")
+    cookie = account.get("cookie", "")
+    raw_line = account.get("raw_line", "")
 
-    delivery_text = (
-        "🎁 Your Free Indo IG:\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📧 {email}:{password}\n"
-    )
+    delivery_lines = [
+        "🎁 Your Free Indo IG:",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        f"📧 <code>{email}</code>:<code>{password}</code>",
+    ]
     if username:
-        delivery_text += f"👤 {username}\n"
-    delivery_text += (
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Enjoy your Indo! 🎉"
-    )
+        delivery_lines.append(f"👤 <code>{username}</code>")
+    if cookie:
+        delivery_lines.append(f"🍪 <code>{cookie}</code>")
+    if raw_line:
+        delivery_lines.append(f"\n📋 Quick Copy:\n<code>{raw_line}</code>")
+    delivery_lines.append("━━━━━━━━━━━━━━━━━━━━━━\nEnjoy your Indo! 🎉")
+
+    delivery_text = "\n".join(delivery_lines)
 
     if query.message:
         await query.message.answer(delivery_text)

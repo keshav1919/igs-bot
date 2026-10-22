@@ -26,6 +26,8 @@ from indo_selling_bot.models.order import Order, OrderItem
 from indo_selling_bot.bot.keyboards import (
     get_available_buy_categories_keyboard,
     get_buy_quantity_keyboard,
+    BUY_INDO_NOTIFY_TEXT,
+    get_buy_indo_notify_keyboard,
 )
 from indo_selling_bot.config import settings
 
@@ -114,6 +116,7 @@ def format_delivery_message(accounts: list[dict], day_number: int, remaining_sto
         uname = acc.get("username") or ""
         email_val = acc.get("email", "")
         pass_val = acc.get("password", "")
+        cookie_val = acc.get("cookie") or ""
         lines.append(f"#{idx}")
         lines.append(f"📧 Email :- <code>{html.escape(email_val)}</code>")
         if uname:
@@ -121,12 +124,15 @@ def format_delivery_message(accounts: list[dict], day_number: int, remaining_sto
         else:
             lines.append("🫟 UserName : - ")
         lines.append(f"🔑 Password : <code>{html.escape(pass_val)}</code>")
+        if cookie_val:
+            lines.append(f"🍪 Cookie : <code>{html.escape(cookie_val)}</code>")
         lines.append("")
 
     lines.append("━━━━━━━━━━━━━━━━━━")
-    lines.append("📋 Quick Copy (Email:Password):")
+    lines.append("📋 Quick Copy:")
     for acc in accounts:
-        lines.append(f"<code>{html.escape(acc['email'])}:{html.escape(acc['password'])}</code>")
+        copy_val = acc.get("raw_line") or f"{acc['email']}:{acc['password']}"
+        lines.append(f"<code>{html.escape(copy_val)}</code>")
     lines.append("━━━━━━━━━━━━━━━━━━")
     lines.append(f"📦 Remaining Stock: {remaining_stock} ")
     lines.append("💾 Have a Nice day reg @legend_tg ")
@@ -136,31 +142,41 @@ def format_delivery_message(accounts: list[dict], day_number: int, remaining_sto
 
 @buy_indo_router.message(F.text == "🛒 Buy Indo")
 @buy_indo_router.message(Command("buy"))
+@buy_indo_router.message(Command("catalog"))
 async def handle_buy_indo_menu(message: Message, state: FSMContext | None = None) -> None:
-    """Display only available age categories with genuine stock from stock.txt."""
+    """Show intermediate notification message before purchasing Indo accounts."""
     if state:
         await state.clear()
 
-    available_cats = StockTxtService.get_available_categories()
-
-    if not available_cats:
-        text = "📦 All categories are currently out of stock. Please check again later."
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="« Back to Main Menu", callback_data="back_to_main", style="danger")]
-        ])
-    else:
-        text = "🛒  Select  Indo"
-        kb = get_available_buy_categories_keyboard(available_cats)
-
     await message.answer(
-        text,
-        reply_markup=kb
+        BUY_INDO_NOTIFY_TEXT,
+        reply_markup=get_buy_indo_notify_keyboard()
     )
 
 
-@buy_indo_router.callback_query(F.data == "back_to_buy_indo")
-async def handle_back_to_buy_indo_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
-    """Return customer to available age categories list."""
+@buy_indo_router.callback_query(F.data.in_({"buy_indo_notify", "back_to_buy_indo"}))
+async def handle_buy_indo_notify_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
+    """Show intermediate notification message when tapping Buy Indo in inline menus."""
+    await query.answer()
+    if state:
+        await state.clear()
+
+    if query.message:
+        try:
+            await query.message.edit_text(
+                BUY_INDO_NOTIFY_TEXT,
+                reply_markup=get_buy_indo_notify_keyboard()
+            )
+        except Exception:
+            await query.message.answer(
+                BUY_INDO_NOTIFY_TEXT,
+                reply_markup=get_buy_indo_notify_keyboard()
+            )
+
+
+@buy_indo_router.callback_query(F.data == "open_buy_categories")
+async def handle_open_buy_categories_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
+    """Display available age categories after customer taps 'buy  igs'."""
     await query.answer()
     if state:
         await state.clear()
@@ -183,7 +199,10 @@ async def handle_back_to_buy_indo_callback(query: CallbackQuery, state: FSMConte
                 reply_markup=kb
             )
         except Exception:
-            pass
+            await query.message.answer(
+                text,
+                reply_markup=kb
+            )
 
 
 @buy_indo_router.callback_query(F.data.startswith("buy_day:"))

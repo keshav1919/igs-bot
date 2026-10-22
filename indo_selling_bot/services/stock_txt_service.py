@@ -206,26 +206,34 @@ class StockTxtService:
         email = parts[0]
         password = parts[1]
         username = ""
+        cookie = ""
         created_at_dt = None
+        ts_idx = None
 
         # Search backwards for a valid timestamp segment
-        if len(parts) >= 4:
-            for i in range(2, len(parts)):
-                cand_dt = ":".join(parts[i:]).strip()
-                try:
-                    created_at_dt = cls.parse_timestamp(cand_dt)
-                    if i >= 3:
-                        username = parts[i - 1]
-                    break
-                except Exception:
-                    continue
-
-        if created_at_dt is None and len(parts) >= 3:
-            # Check if parts[2] is a timestamp or username
+        for i in range(len(parts) - 1, 1, -1):
+            cand_dt = ":".join(parts[i:]).strip()
             try:
-                created_at_dt = cls.parse_timestamp(parts[2])
+                created_at_dt = cls.parse_timestamp(cand_dt)
+                ts_idx = i
+                break
             except Exception:
-                username = parts[2]
+                continue
+
+        if ts_idx is not None:
+            middle = parts[2:ts_idx]
+        else:
+            middle = parts[2:]
+
+        if len(middle) >= 2:
+            username = middle[0]
+            cookie = ":".join(middle[1:])
+        elif len(middle) == 1:
+            val = middle[0]
+            if "=" in val or ";" in val:
+                cookie = val
+            else:
+                username = val
 
         has_explicit_ts = (created_at_dt is not None)
         # Default timestamp if missing: default to 'now' (1 day old)
@@ -240,6 +248,7 @@ class StockTxtService:
             "email": email,
             "password": password,
             "username": username,
+            "cookie": cookie,
             "domain": domain,
             "created_at": created_at_dt,
             "has_explicit_timestamp": has_explicit_ts,
@@ -479,7 +488,11 @@ class StockTxtService:
                 email = parsed["email"]
                 pwd = parsed["password"]
                 uname = parsed.get("username", "")
-                formatted_line = f"{email}:{pwd}:{uname}:{default_time_str}"
+                cookie = parsed.get("cookie", "")
+                if cookie:
+                    formatted_line = f"{email}:{pwd}:{uname}:{cookie}:{default_time_str}"
+                else:
+                    formatted_line = f"{email}:{pwd}:{uname}:{default_time_str}"
 
             lines_to_append.append(formatted_line)
             added_count += 1

@@ -207,25 +207,30 @@ class StockImportService:
             elif len(tokens) >= 4:
                 return tokens[0][:64], tokens[1], tokens[2], tokens[3], {}
 
-        # Format 2: Colon-delimited (mail:pass:username:date:time)
+        # Format 2: Colon-delimited (mail:pass:username:cookie:date:time or mail:pass:username:date:time)
         if ":" in clean:
             parts = [p.strip() for p in clean.split(":")]
             # Search backwards for a valid timestamp segment
-            for i in range(2, len(parts)):
+            for i in range(len(parts) - 1, 1, -1):
                 cand_dt = ":".join(parts[i:]).strip()
                 try:
                     cls.parse_timestamp(cand_dt)
-                    if i >= 3:
-                        mail = parts[0]
-                        pwd = parts[1] if len(parts) > 1 else ""
-                        uname = parts[i - 1]
-                        item_id = (uname if uname else mail)[:64]
-                        extra = {"mail": mail, "password": pwd, "username": uname, "raw_line": clean}
-                    else:
-                        mail = parts[0]
-                        pwd = parts[1] if len(parts) > 1 else ""
-                        item_id = mail[:64]
-                        extra = {"mail": mail, "password": pwd, "username": "", "raw_line": clean}
+                    mail = parts[0]
+                    pwd = parts[1] if len(parts) > 1 else ""
+                    middle = parts[2:i]
+                    uname = ""
+                    cookie = ""
+                    if len(middle) >= 2:
+                        uname = middle[0]
+                        cookie = ":".join(middle[1:])
+                    elif len(middle) == 1:
+                        val = middle[0]
+                        if "=" in val or ";" in val:
+                            cookie = val
+                        else:
+                            uname = val
+                    item_id = (uname if uname else mail)[:64]
+                    extra = {"mail": mail, "password": pwd, "username": uname, "cookie": cookie, "raw_line": clean}
                     return item_id, None, cand_dt, "active", extra
                 except Exception:
                     continue
@@ -237,7 +242,7 @@ class StockImportService:
                 uname = parts[2]
                 raw_dt = ":".join(parts[3:]).strip()
                 item_id = (uname if uname else mail)[:64]
-                extra = {"mail": mail, "password": pwd, "username": uname, "raw_line": clean}
+                extra = {"mail": mail, "password": pwd, "username": uname, "cookie": "", "raw_line": clean}
                 return item_id, None, raw_dt, "active", extra
             elif len(parts) == 2:
                 return parts[0][:64], None, parts[1], "active", {}

@@ -14,6 +14,22 @@ CHANNEL_VERIFICATION_TEXT = (
     "================"
 )
 
+BUY_INDO_NOTIFY_TEXT = (
+    "cookie login Indo igs \n\n"
+    "Note : this is cooke login igs . YOU Recive igs in email:pass:username:cookie:time format .Our Igs have pre Suspend gurente ."
+)
+
+def get_buy_indo_notify_keyboard() -> InlineKeyboardMarkup:
+    """
+    Inline keyboard after clicking Buy Indo:
+    - buy  igs (success style)
+    - « Back to Main Menu (danger style)
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="buy  igs", callback_data="open_buy_categories", style="success")],
+        [InlineKeyboardButton(text="« Back to Main Menu", callback_data="back_to_main", style="danger")]
+    ])
+
 def get_channel_verification_keyboard() -> InlineKeyboardMarkup:
     """
     Inline keyboard for channel verification:
@@ -113,7 +129,7 @@ def get_buy_quantity_keyboard(day_number: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="✏️ Custom Amount", callback_data=f"buy_custom:{day_number}", style="primary"),
         ],
         [
-            InlineKeyboardButton(text="« Back to Categories", callback_data="back_to_buy_indo", style="danger"),
+            InlineKeyboardButton(text="« Back to Categories", callback_data="open_buy_categories", style="danger"),
         ],
     ])
 
@@ -176,7 +192,7 @@ def get_age_category_detail_keyboard(
         ])
 
     rows.append([
-        InlineKeyboardButton(text="« Back to Age Categories", callback_data="back_to_buy_indo", style="danger")
+        InlineKeyboardButton(text="« Back to Age Categories", callback_data="open_buy_categories", style="danger")
     ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
