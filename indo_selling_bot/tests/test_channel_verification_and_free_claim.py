@@ -143,7 +143,7 @@ async def test_start_handler_unsubscribed_vs_subscribed():
     kb = msg.answer.call_args[1]["reply_markup"]
     assert any("Join Chanel" in btn.text for row in kb.inline_keyboard for btn in row)
     assert any("Verify" in btn.text for row in kb.inline_keyboard for btn in row)
-    assert any("Free Indo ig" in btn.text for row in kb.inline_keyboard for btn in row)
+    assert not any("Free Indo ig" in btn.text for row in kb.inline_keyboard for btn in row)
 
     # 2. Subscribed user
     bot.get_chat_member.return_value = MagicMock(status="member")
@@ -154,7 +154,7 @@ async def test_start_handler_unsubscribed_vs_subscribed():
     assert "Welcome Legend Indo Bot, Ravi" in welcome_text
     welcome_kb = msg.answer.call_args[1]["reply_markup"]
     assert any("Buy Indo" in btn.text for row in welcome_kb.inline_keyboard for btn in row)
-    assert any("Free Indo ig" in btn.text for row in welcome_kb.inline_keyboard for btn in row)
+    assert not any("Free Indo ig" in btn.text for row in welcome_kb.inline_keyboard for btn in row)
 
 @pytest.mark.asyncio
 async def test_verify_callback():
@@ -186,36 +186,17 @@ async def test_verify_callback():
 
 @pytest.mark.asyncio
 async def test_free_indo_claim_strictly_once():
-    """Verify a user can claim exactly 1 free Indo IG, and subsequent claims are rejected."""
+    """Verify clicking free indo button notifies user that the option is discontinued."""
     bot = AsyncMock()
-    bot.get_chat_member.return_value = MagicMock(status="member")
-    bot.send_message = AsyncMock()
-
     user = User(id=333222, is_bot=False, first_name="Karan", username="karan_dev")
     cb = AsyncMock(spec=CallbackQuery)
     cb.from_user = user
     cb.bot = bot
     cb.answer = AsyncMock()
-    cb.message = AsyncMock()
-    cb.message.answer = AsyncMock()
 
-    # 1. First claim succeeds
     await handle_claim_free_ig_callback(cb)
     assert cb.answer.called
-    assert "claimed" in cb.answer.call_args[0][0].lower()
-    assert cb.message.answer.called
-    delivery_text = cb.message.answer.call_args[0][0]
-    assert "Your Free Indo IG" in delivery_text
-    assert "free_user" in delivery_text
-
-    # 2. Second claim must be rejected
-    cb.answer.reset_mock()
-    cb.message.answer.reset_mock()
-    await handle_claim_free_ig_callback(cb)
-    assert cb.answer.called
-    alert_text = cb.answer.call_args[0][0]
-    assert "already claimed" in alert_text.lower() or "alredy clamed" in alert_text.lower()
-    assert not cb.message.answer.called
+    assert "discontinued" in cb.answer.call_args[0][0].lower()
 
 @pytest.mark.asyncio
 async def test_free_indo_concurrent_claims_prevent_double_claim():

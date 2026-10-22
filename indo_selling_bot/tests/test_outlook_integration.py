@@ -55,7 +55,7 @@ async def test_start_welcome_inline_keyboard_has_outlook():
     all_btns = [btn.text for row in kb.inline_keyboard for btn in row]
     assert any("Buy Indo" in t for t in all_btns)
     assert any("Outlook" in t for t in all_btns)
-    assert any("Free Indo ig" in t for t in all_btns)
+    assert not any("Free Indo ig" in t for t in all_btns)
 
 @pytest.mark.asyncio
 async def test_mail_credential_parser():

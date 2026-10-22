@@ -35,15 +35,11 @@ def get_channel_verification_keyboard() -> InlineKeyboardMarkup:
     Inline keyboard for channel verification:
     - Join Chanel (green/success style)
     - Verify (blue/primary style)
-    - Free Indo ig (blue/primary style)
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="Join Chanel", url=settings.force_channel_url, style="success"),
             InlineKeyboardButton(text="Verify", callback_data="verify_channel", style="primary"),
-        ],
-        [
-            InlineKeyboardButton(text="Free Indo ig", callback_data="claim_free_ig", style="primary")
         ]
     ])
 
@@ -52,14 +48,12 @@ def get_start_welcome_keyboard() -> InlineKeyboardMarkup:
     Main welcome keyboard on /start:
     - 🛒 Buy Indo (green/success)
     - 📩 Outlook (blue/primary)
-    - Free Indo ig (blue/primary)
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success"),
             InlineKeyboardButton(text="📩 Outlook", callback_data="outlook_home", style="primary"),
-        ],
-        [InlineKeyboardButton(text="Free Indo ig", callback_data="claim_free_ig", style="primary")]
+        ]
     ])
 
 def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
