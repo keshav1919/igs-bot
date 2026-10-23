@@ -86,3 +86,91 @@ def test_get_total_stock_count_exists():
     count = StockTxtService.get_total_stock_count()
     assert isinstance(count, int)
     assert count >= 0
+
+
+@pytest.mark.asyncio
+async def test_send_customer_delivery_single():
+    from unittest.mock import AsyncMock, MagicMock
+    from indo_selling_bot.bot.handlers.buy_indo import send_customer_delivery
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    mock_query = MagicMock()
+    mock_message = AsyncMock()
+    mock_query.message = mock_message
+
+    account = {
+        "email": "LemonCaluza350880@outlook.fr",
+        "password": "OkW6tz91AW@",
+        "username": "lemoncaluza350880",
+        "cookie": "sessionid=test_cookie_123",
+        "timestamp_str": "22 Oct 2026, 21:59:17 IST",
+        "raw_line": "LemonCaluza350880@outlook.fr:OkW6tz91AW@:lemoncaluza350880:sessionid=test_cookie_123:22 Oct 2026, 21:59:17 IST",
+        "domain": "outlook.fr"
+    }
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Back", callback_data="back")]])
+    await send_customer_delivery(
+        query=mock_query,
+        accounts=[account],
+        day_number=1,
+        remaining_stock=10,
+        order_code="ORD-999999",
+        kb=kb
+    )
+
+    mock_message.edit_text.assert_called_once()
+    called_text = mock_message.edit_text.call_args[0][0]
+    assert "INDO STOCK DELIVERY (1 Accounts)" in called_text
+    assert "LemonCaluza350880@outlook.fr" in called_text
+    assert len(called_text) <= 3800
+
+
+@pytest.mark.asyncio
+async def test_send_customer_delivery_chunked_for_large_order():
+    from unittest.mock import AsyncMock, MagicMock
+    from indo_selling_bot.bot.handlers.buy_indo import send_customer_delivery
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    mock_query = MagicMock()
+    mock_message = AsyncMock()
+    mock_query.message = mock_message
+
+    sample_cookie = "datr=UT_aag5LA2e6kPKSmtpI9G2n; ig_did=BA4B1918-896B-4F65-BCB7-C6A1B6A9C5A8; " * 8
+    accounts = []
+    for i in range(10):
+        accounts.append({
+            "email": f"user{i}@outlook.fr",
+            "password": f"Pass{i}123@",
+            "username": f"user_{i}",
+            "cookie": sample_cookie,
+            "timestamp_str": "22 Oct 2026, 22:23:09 IST",
+            "raw_line": f"user{i}@outlook.fr:Pass{i}123@:user_{i}:{sample_cookie}:22 Oct 2026, 22:23:09 IST",
+            "domain": "outlook.fr"
+        })
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Back", callback_data="back")]])
+    await send_customer_delivery(
+        query=mock_query,
+        accounts=accounts,
+        day_number=1,
+        remaining_stock=5,
+        order_code="ORD-888888",
+        kb=kb
+    )
+
+    # Intro message edited to dismiss spinner button
+    mock_message.edit_text.assert_called_once()
+    intro = mock_message.edit_text.call_args[0][0]
+    assert "Delivering your 10 accounts in parts below" in intro
+
+    # Ensure all answer messages are <= 3800 characters
+    assert mock_message.answer.call_count >= 2
+    for call in mock_message.answer.call_args_list:
+        chunk = call[0][0]
+        assert len(chunk) <= 3800, f"Chunk exceeded Telegram limit: {len(chunk)} chars"
+
+    # Ensure .txt document file was sent
+    mock_message.answer_document.assert_called_once()
+    doc_call = mock_message.answer_document.call_args
+    assert doc_call.kwargs["document"].filename == "indo_ORD-888888.txt"
+
