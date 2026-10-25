@@ -134,7 +134,10 @@ class Settings:
     TRUEXGATEWAY_BASE_URL: str = os.getenv("TRUEXGATEWAY_BASE_URL", "http://truexgateway.xyz/api")
     MIN_DEPOSIT_AMOUNT: float = float(os.getenv("MIN_DEPOSIT_AMOUNT", "1.0"))
     MAX_DEPOSIT_AMOUNT: float = float(os.getenv("MAX_DEPOSIT_AMOUNT", "100000.0"))
-    SUCCESS_STICKER_FILE_ID: str = os.getenv("SUCCESS_STICKER_FILE_ID", "")
+    SUCCESS_STICKER_FILE_ID: str = os.getenv(
+        "SUCCESS_STICKER_FILE_ID",
+        "CAACAgUAAxkBAAIL6WreHy0uBxynl7ZRxMMpFc4Q_mmTAAIVCwAC3ReQVvwjxMtoqXwWPQQ"
+    )
 
     @property
     def SUCCESS_IMAGE_PATH(self) -> Path:

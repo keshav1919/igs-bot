@@ -237,17 +237,11 @@ def get_deposit_request_keyboard(deposit_ref: str | None = None) -> InlineKeyboa
 def get_truex_payment_keyboard(txg_order_id: str, app_url: str | None = None) -> InlineKeyboardMarkup:
     """
     Inline keyboard displayed with dynamic TrueXGateway QR code:
-    - 🔄 Check Payment Status
-    - 🌐 Pay via UPI / Web (only if http/https url)
-    - ❌ Cancel Payment
+    Shows ONLY the red Back button matching image 2.
     """
-    rows = [
-        [InlineKeyboardButton(text="🔄 Check Payment Status", callback_data=f"txg_chk:{txg_order_id}")]
-    ]
-    if app_url and (app_url.startswith("http://") or app_url.startswith("https://")):
-        rows.append([InlineKeyboardButton(text="🌐 Pay via UPI / Web", url=app_url)])
-    rows.append([InlineKeyboardButton(text="❌ Cancel Payment", callback_data=f"txg_cnc:{txg_order_id}")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Back", callback_data=f"txg_cnc:{txg_order_id}", style="danger")]
+    ])
 
 def get_admin_deposit_review_keyboard(deposit_ref: str) -> InlineKeyboardMarkup:
     """Admin quick actions for verified approval or rejection of payment."""

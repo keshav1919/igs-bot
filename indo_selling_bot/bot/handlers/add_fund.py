@@ -274,20 +274,15 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
 
     qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
 
-    # Display amount without decimal in caption (e.g. ₹40), while actual QR contains unique decimal (e.g. 40.02)
-    display_amount = int(base_amount) if float(base_amount).is_integer() else f"{base_amount:.2f}"
-
     caption = (
-        f"💰 <b>Amount to Pay:</b> <code>₹{display_amount}</code>\n"
-        f"🆔 <b>Order ID:</b> <code>{order_ref}</code>\n"
+        f"💰 <b>Amount to Pay:</b> <code>₹{base_amount:.2f}</code>\n\n"
+        "⏳ <b>Status:</b> PENDING PAYMENT\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "1. Scan the QR code with any UPI app (Paytm, PhonePe, GPay, BHIM).\n"
-        "2. Complete the transfer (amount is auto-filled from QR).\n"
-        "3. Funds are <b>automatically detected & credited</b> within seconds!\n\n"
-        "⏳ <i>Waiting for live bank confirmation...</i>"
+        "1. Scan the QR code\n"
+        "2. Use Indo and injoy"
     )
 
-    kb = get_truex_payment_keyboard(txg_order_id, app_url=checkout_url)
+    kb = get_truex_payment_keyboard(txg_order_id)
     try:
         await status_msg.delete()
     except Exception:
