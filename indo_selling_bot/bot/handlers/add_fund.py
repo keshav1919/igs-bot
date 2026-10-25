@@ -98,9 +98,18 @@ async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int) -> 
     keyboard = get_add_fund_keyboard()
 
     if isinstance(target, CallbackQuery):
-        await target.answer()
+        try:
+            await target.answer()
+        except Exception:
+            pass
         if target.message:
-            await target.message.edit_text(text, reply_markup=keyboard)
+            try:
+                await target.message.edit_text(text, reply_markup=keyboard)
+            except Exception:
+                try:
+                    await target.message.answer(text, reply_markup=keyboard)
+                except Exception:
+                    pass
     else:
         await target.answer(text, reply_markup=keyboard)
 
@@ -116,7 +125,7 @@ async def handle_add_fund_menu(message: Message, state: FSMContext) -> None:
     await _send_add_fund_info(message, user_id)
 
 
-@add_fund_router.callback_query(F.data == "goto_add_fund")
+@add_fund_router.callback_query(F.data.in_({"goto_add_fund", "menu_add_fund", "add_fund", "funds_help"}))
 async def handle_goto_add_fund_callback(query: CallbackQuery, state: FSMContext) -> None:
     """Redirect to Add Fund from insufficient balance button."""
     await state.clear()

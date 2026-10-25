@@ -253,6 +253,10 @@ async def send_customer_delivery(
             except Exception as e:
                 logger.warning(f"edit_text failed for single delivery: {e}")
                 try:
+                    await query.message.edit_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+                try:
                     await query.message.answer(single_msg, parse_mode="HTML", reply_markup=kb)
                     return
                 except Exception as e2:

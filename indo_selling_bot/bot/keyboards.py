@@ -580,9 +580,9 @@ def get_outlook_buy_confirm_keyboard(can_afford: bool = True) -> InlineKeyboardM
     else:
         rows.append([
             InlineKeyboardButton(
-                text="💳 Add Funds / Top Up Wallet",
-                callback_data="funds_help",
-                style="success"
+                text="💰 Add Fund",
+                callback_data="goto_add_fund",
+                style="primary"
             )
         ])
     rows.append([

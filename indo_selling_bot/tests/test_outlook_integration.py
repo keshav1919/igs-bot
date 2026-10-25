@@ -118,3 +118,33 @@ async def test_outlook_service_buy_and_restock():
     async with AsyncSessionLocal() as db:
         acc_db = await OutlookService.get_account_by_id(account_id=acc["id"], user_id=user_id)
         assert acc_db is None  # no longer owned by user
+
+
+@pytest.mark.asyncio
+async def test_outlook_buy_confirm_keyboard_insufficient_balance_has_goto_add_fund():
+    from indo_selling_bot.bot.keyboards import get_outlook_buy_confirm_keyboard
+    kb = get_outlook_buy_confirm_keyboard(can_afford=False)
+    all_btns = [(b.text, b.callback_data) for row in kb.inline_keyboard for b in row]
+    btn_cbs = [cb for text, cb in all_btns]
+    assert "goto_add_fund" in btn_cbs
+    add_fund_btn = [text for text, cb in all_btns if cb == "goto_add_fund"]
+    assert len(add_fund_btn) == 1
+    assert "Add Fund" in add_fund_btn[0]
+
+
+@pytest.mark.asyncio
+async def test_handle_funds_help_redirects_to_add_fund():
+    from indo_selling_bot.bot.handlers.outlook import handle_funds_help
+    mock_query = MagicMock(spec=CallbackQuery)
+    mock_query.from_user = MagicMock(id=9991234)
+    mock_message = AsyncMock()
+    mock_query.message = mock_message
+    mock_query.answer = AsyncMock()
+
+    await handle_funds_help(mock_query)
+    # _send_add_fund_info edits or answers with Add Fund text
+    assert mock_message.edit_text.called or mock_message.answer.called
+    call_args = mock_message.edit_text.call_args or mock_message.answer.call_args
+    sent_text = call_args[0][0]
+    assert "Add Funds to Your Wallet" in sent_text
+

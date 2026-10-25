@@ -262,88 +262,139 @@ async def handle_buy_confirm(event: Message | CallbackQuery):
 async def handle_buy_execute(callback: CallbackQuery):
     """Executes the purchase and delivers credentials."""
     user = callback.from_user
-    user_id = user.id
-
-    ok, reason, account = await OutlookService.buy_outlook_account(
-        user_id=user_id,
-        price=OutlookService.PRICE_PER_ACCOUNT
-    )
-
-    if not ok or not account:
-        if reason == "OUT_OF_STOCK":
-            await callback.answer("❌ Out of stock!", show_alert=True)
-            await show_outlook_screen(user_id=user_id, page=1, message_or_call=callback, edit=True)
-        elif reason == "INSUFFICIENT_BALANCE":
-            await callback.answer("❌ Insufficient balance! Please recharge via Add Fund.", show_alert=True)
-        else:
-            await callback.answer(f"❌ Purchase failed: {reason}", show_alert=True)
+    user_id = user.id if user else 0
+    if not user_id:
+        await callback.answer("User context missing.", show_alert=True)
         return
 
-    async with AsyncSessionLocal() as db:
-        new_balance = await WalletService.get_balance(db, user_id)
-    stock_left = await OutlookService.get_available_stock_count()
-
-    await callback.answer("🎉 Purchase successful!", show_alert=False)
-
-    text = (
-        "🎉 <b>Purchase Successful!</b>\n\n"
-        f"📧 <b>Email:</b> <code>{html.escape(account['email'])}</code>\n"
-        f"🔑 <b>Password:</b> <code>{html.escape(account['password'])}</code>\n"
-        f"💰 <b>Price Paid:</b> ₹{OutlookService.PRICE_PER_ACCOUNT:.2f}\n"
-        f"💳 <b>Wallet Balance:</b> ₹{new_balance:.2f}\n\n"
-        "<i>Tap below to open your inbox & receive OTP codes instantly:</i>"
-    )
-
+    # Immediately acknowledge callback to stop Telegram client spinner
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=get_outlook_purchase_success_keyboard(account_id=account["id"])
-        )
+        await callback.answer("⏳ Processing purchase...", show_alert=False)
     except Exception:
-        await callback.message.answer(
-            text,
-            reply_markup=get_outlook_purchase_success_keyboard(account_id=account["id"])
-        )
+        pass
 
-    # Notify admins
-    buyer_name = html.escape(user.full_name or "Unknown")
-    buyer_username = f"@{user.username}" if user.username else "No username"
-    admin_alert = (
-        "🔔 <b>New Outlook Purchase Alert!</b>\n\n"
-        f"👤 <b>Buyer:</b> {buyer_name} ({buyer_username})\n"
-        f"🆔 <b>Buyer ID:</b> <code>{user.id}</code>\n"
-        f"📧 <b>Account:</b> <code>{html.escape(account.get('email', ''))}</code>\n"
-        f"🔑 <b>Password:</b> <code>{html.escape(account.get('password', ''))}</code>\n"
-        f"💰 <b>Paid:</b> ₹{OutlookService.PRICE_PER_ACCOUNT:.2f}\n"
-        f"💳 <b>Wallet Balance Left:</b> ₹{new_balance:.2f}\n"
-        f"📦 <b>Outlook Stock Left:</b> <b>{stock_left}</b>"
-    )
-    for admin_id in settings.admin_ids:
+    # Immediately disable button to prevent double-click / spinner freeze
+    if callback.message:
         try:
-            await callback.bot.send_message(admin_id, admin_alert)
+            await callback.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⏳ Processing purchase...", callback_data="noop")]
+                ])
+            )
         except Exception:
             pass
 
+    try:
+        ok, reason, account = await OutlookService.buy_outlook_account(
+            user_id=user_id,
+            price=OutlookService.PRICE_PER_ACCOUNT
+        )
 
-@outlook_router.callback_query(F.data == "funds_help")
+        if not ok or not account:
+            if reason == "OUT_OF_STOCK":
+                await callback.answer("❌ Out of stock!", show_alert=True)
+                await show_outlook_screen(user_id=user_id, page=1, message_or_call=callback, edit=True)
+            elif reason == "INSUFFICIENT_BALANCE":
+                async with AsyncSessionLocal() as db:
+                    bal = await WalletService.get_balance(db, user_id)
+                price = OutlookService.PRICE_PER_ACCOUNT
+                text = (
+                    "⚠️ <b>Insufficient Balance!</b>\n\n"
+                    f"💰 <b>Account Price:</b> ₹{price:.2f}\n"
+                    f"💳 <b>Your Balance:</b> ₹{bal:.2f}\n"
+                    f"❌ <i>You need ₹{price - bal:.2f} more to purchase.</i>\n\n"
+                    "Please recharge your wallet via 💰 Add Fund."
+                )
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💰 Add Fund", callback_data="goto_add_fund", style="primary")],
+                    [InlineKeyboardButton(text="⬅️ Back", callback_data="outlook_home", style="primary")]
+                ])
+                if callback.message:
+                    try:
+                        await callback.message.edit_text(text, reply_markup=kb)
+                    except Exception:
+                        await callback.message.answer(text, reply_markup=kb)
+            else:
+                await callback.answer(f"❌ Purchase failed: {reason}", show_alert=True)
+                if callback.message:
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="⬅️ Back to Outlook", callback_data="outlook_home", style="primary")]
+                    ])
+                    try:
+                        await callback.message.edit_text(f"❌ Purchase failed: {reason}", reply_markup=kb)
+                    except Exception:
+                        pass
+            return
+
+        async with AsyncSessionLocal() as db:
+            new_balance = await WalletService.get_balance(db, user_id)
+        stock_left = await OutlookService.get_available_stock_count()
+
+        text = (
+            "🎉 <b>Purchase Successful!</b>\n\n"
+            f"📧 <b>Email:</b> <code>{html.escape(account['email'])}</code>\n"
+            f"🔑 <b>Password:</b> <code>{html.escape(account['password'])}</code>\n"
+            f"💰 <b>Price Paid:</b> ₹{OutlookService.PRICE_PER_ACCOUNT:.2f}\n"
+            f"💳 <b>Wallet Balance:</b> ₹{new_balance:.2f}\n\n"
+            "<i>Tap below to open your inbox & receive OTP codes instantly:</i>"
+        )
+
+        success_kb = get_outlook_purchase_success_keyboard(account_id=account["id"])
+        if callback.message:
+            try:
+                await callback.message.edit_text(text, reply_markup=success_kb)
+            except Exception:
+                await callback.message.answer(text, reply_markup=success_kb)
+
+        # Notify admins
+        buyer_name = html.escape(user.full_name or "Unknown")
+        buyer_username = f"@{user.username}" if user.username else "No username"
+        admin_alert = (
+            "🔔 <b>New Outlook Purchase Alert!</b>\n\n"
+            f"👤 <b>Buyer:</b> {buyer_name} ({buyer_username})\n"
+            f"🆔 <b>Buyer ID:</b> <code>{user.id}</code>\n"
+            f"📧 <b>Account:</b> <code>{html.escape(account.get('email', ''))}</code>\n"
+            f"🔑 <b>Password:</b> <code>{html.escape(account.get('password', ''))}</code>\n"
+            f"💰 <b>Paid:</b> ₹{OutlookService.PRICE_PER_ACCOUNT:.2f}\n"
+            f"💳 <b>Wallet Balance Left:</b> ₹{new_balance:.2f}\n"
+            f"📦 <b>Outlook Stock Left:</b> <b>{stock_left}</b>"
+        )
+        for admin_id in settings.admin_ids:
+            try:
+                await callback.bot.send_message(admin_id, admin_alert)
+            except Exception:
+                pass
+
+    except Exception as exc:
+        logger.exception(f"Unhandled error in Outlook buy_execute: {exc}")
+        if callback.message:
+            err_kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ Back to Outlook", callback_data="outlook_home", style="primary")]
+            ])
+            try:
+                await callback.message.edit_text(
+                    "❌ <b>An unexpected error occurred during purchase.</b>\n"
+                    "If your balance was deducted, please contact support @legend_tg.",
+                    parse_mode="HTML",
+                    reply_markup=err_kb
+                )
+            except Exception:
+                try:
+                    await callback.message.answer(
+                        "❌ An unexpected error occurred. Please contact support @legend_tg.",
+                        reply_markup=err_kb
+                    )
+                except Exception:
+                    pass
+
+
+@outlook_router.callback_query(F.data.in_({"funds_help", "menu_add_fund"}))
 async def handle_funds_help(callback: CallbackQuery):
     """Directs user to add funds."""
-    await callback.answer()
-    text = (
-        "💳 <b>How to Add Funds</b>\n\n"
-        "You can easily recharge your wallet using the <b>💰 Add Fund</b> button in the main menu.\n\n"
-        f"🆔 <b>Your Telegram ID:</b> <code>{callback.from_user.id}</code>\n"
-        f"💰 <b>Outlook Price:</b> ₹{OutlookService.PRICE_PER_ACCOUNT:.2f} / email\n\n"
-        "Scan the dynamic UPI QR code, complete payment, and upload your screenshot for verification."
-    )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💰 Go to Add Fund", callback_data="menu_add_fund", style="success")],
-        [InlineKeyboardButton(text="⬅️ Back", callback_data="outlook_home", style="primary")]
-    ])
-    try:
-        await callback.message.edit_text(text, reply_markup=kb)
-    except Exception:
-        await callback.message.answer(text, reply_markup=kb)
+    from indo_selling_bot.bot.handlers.add_fund import _send_add_fund_info
+    user = callback.from_user
+    user_id = user.id if user else 0
+    await _send_add_fund_info(callback, user_id)
 
 
 # ==========================================
