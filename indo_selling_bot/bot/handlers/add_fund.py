@@ -51,10 +51,8 @@ class AddFundState(StatesGroup):
     waiting_for_screenshot = State()
 
 
-def _is_admin(user_id: int | None) -> bool:
-    if not user_id:
-        return False
-    return settings.is_admin(user_id)
+def _is_admin(user_id: int | None = None, username: str | None = None) -> bool:
+    return settings.is_admin(user_id, username)
 
 
 def generate_upi_qr_bytes(upi_id: str, payee_name: str, amount: float, ref_id: str) -> bytes:
@@ -80,12 +78,12 @@ def generate_upi_qr_bytes(upi_id: str, payee_name: str, amount: float, ref_id: s
 # ==========================================
 # 1. Add Fund Main Information Screen
 # ==========================================
-async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int) -> None:
+async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int, username: str | None = None) -> None:
     """Helper to display business payment instructions and minimum requirement."""
     async with AsyncSessionLocal() as db:
         balance = await WalletService.get_balance(db, user_id)
 
-    is_admin = _is_admin(user_id)
+    is_admin = _is_admin(user_id, username)
     min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
     min_str = "No limit (Admin)" if is_admin else f"₹{int(min_dep)}"
 
@@ -129,7 +127,8 @@ async def handle_add_fund_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     user = message.from_user
     user_id = user.id if user else 0
-    await _send_add_fund_info(message, user_id)
+    username = user.username if user else None
+    await _send_add_fund_info(message, user_id, username)
 
 
 @add_fund_router.callback_query(F.data.in_({"goto_add_fund", "menu_add_fund", "add_fund", "funds_help"}))
@@ -138,7 +137,8 @@ async def handle_goto_add_fund_callback(query: CallbackQuery, state: FSMContext)
     await state.clear()
     user = query.from_user
     user_id = user.id if user else 0
-    await _send_add_fund_info(query, user_id)
+    username = user.username if user else None
+    await _send_add_fund_info(query, user_id, username)
 
 
 # ==========================================
@@ -151,7 +151,8 @@ async def handle_fund_enter_amount_click(query: CallbackQuery, state: FSMContext
     await state.set_state(AddFundState.waiting_for_amount)
     user = query.from_user
     user_id = user.id if user else 0
-    is_admin = _is_admin(user_id)
+    username = user.username if user else None
+    is_admin = _is_admin(user_id, username)
     min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
     min_line = "⚠️ <b>Minimum deposit: None (Admin: Any amount >= ₹1)</b>" if is_admin else f"⚠️ <b>Minimum deposit: ₹{int(min_dep)}</b>"
     prompt_text = (
@@ -186,7 +187,7 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         await message.answer("User context missing.")
         return
 
-    is_admin = _is_admin(user.id)
+    is_admin = _is_admin(user.id, user.username)
     min_dep = 1.0 if is_admin else float(settings.MIN_DEPOSIT_AMOUNT)
 
     try:

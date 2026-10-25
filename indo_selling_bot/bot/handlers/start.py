@@ -226,3 +226,19 @@ async def handle_verify_channel_callback(query: CallbackQuery) -> None:
 async def handle_claim_free_ig_callback(query: CallbackQuery) -> None:
     """Free claim option has been discontinued."""
     await query.answer("❌ This option has been discontinued.", show_alert=True)
+
+
+@start_router.message(Command("id"))
+@start_router.message(Command("myid"))
+async def handle_id_command(message: Message) -> None:
+    """Display user ID, handle, and administrator status."""
+    user = message.from_user
+    if user:
+        is_adm = settings.is_admin(user.id, user.username)
+        role = "🛡️ <b>Administrator</b> (No deposit limits)" if is_adm else "👤 <b>Customer</b>"
+        await message.answer(
+            f"🆔 <b>Your Telegram User ID:</b> <code>{user.id}</code>\n"
+            f"👤 <b>Username:</b> @{user.username or 'None'}\n"
+            f"📌 <b>Role:</b> {role}",
+            parse_mode="HTML"
+        )

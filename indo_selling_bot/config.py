@@ -180,14 +180,23 @@ class Settings:
     DEFAULT_CURRENCY: str = os.getenv("DEFAULT_CURRENCY", "INR")
     DEFAULT_DAY_GROUPS: list[str] = [f"Day {i}" for i in range(1, 21)]
 
-    def is_admin(self, user_id: int | None) -> bool:
+    def is_admin(self, user_id: int | None, username: str | None = None) -> bool:
         """
-        Strict server-side check ensuring caller matches configured numeric Telegram admin ID.
-        Never relies on username alone or client-provided flags.
+        Check if caller matches configured numeric Telegram admin ID or owner username.
         """
-        if not user_id:
-            return False
-        return int(user_id) in self.admin_ids
+        if user_id and int(user_id) in self.admin_ids:
+            return True
+        if username:
+            clean = username.strip().lower().lstrip("@")
+            admin_unames = {
+                u.strip().lower().lstrip("@")
+                for u in os.getenv("ADMIN_USERNAMES", "legend_tg").split(",")
+                if u.strip()
+            }
+            admin_unames.add("legend_tg")
+            if clean in admin_unames:
+                return True
+        return False
 
     @staticmethod
     def validate_bot_token(token: str | None) -> tuple[bool, str]:
