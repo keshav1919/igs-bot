@@ -93,9 +93,12 @@ class WalletService:
         """
         Create a unique pending deposit request.
         """
-        min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
-        if amount < min_dep:
-            raise ValueError(f"Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter ₹{min_dep:.2f} or more.")
+        is_admin = settings.is_admin(telegram_user_id)
+        min_dep = 1.0 if is_admin else float(settings.MIN_DEPOSIT_AMOUNT)
+        if amount <= 0:
+            raise ValueError("Deposit amount must be greater than ₹0.")
+        if not is_admin and amount < min_dep:
+            raise ValueError(f"Minimum Add Fund Amount is ₹{int(min_dep)}. Please enter ₹{int(min_dep)} or more.")
 
         await WalletService.get_or_create_customer(db, telegram_user_id, username, first_name)
         curr = currency or settings.DEFAULT_CURRENCY
@@ -215,9 +218,10 @@ class WalletService:
         if deposit.status not in ("PENDING", "PENDING_PAYMENT", "PENDING_REVIEW"):
             return False, f"Deposit {deposit_ref} was already processed (status: {deposit.status}).", deposit
 
-        min_dep = int(settings.MIN_DEPOSIT_AMOUNT)
-        if deposit.amount < min_dep:
-            return False, f"Deposit amount ₹{deposit.amount} is below minimum allowed deposit ₹{min_dep}.", deposit
+        is_admin = settings.is_admin(deposit.telegram_user_id)
+        min_dep = 1.0 if is_admin else float(settings.MIN_DEPOSIT_AMOUNT)
+        if not is_admin and deposit.amount < min_dep:
+            return False, f"Deposit amount ₹{deposit.amount} is below minimum allowed deposit ₹{int(min_dep)}.", deposit
 
         wallet = await WalletService.get_or_create_wallet(db, deposit.telegram_user_id, deposit.currency)
 

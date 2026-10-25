@@ -85,11 +85,13 @@ async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int) -> 
     async with AsyncSessionLocal() as db:
         balance = await WalletService.get_balance(db, user_id)
 
+    is_admin = _is_admin(user_id)
     min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
+    min_str = "No limit (Admin)" if is_admin else f"₹{int(min_dep)}"
 
     text = (
         "💰 <b>Add Funds to Your Wallet</b>\n\n\n"
-        f"⚠️ <b>Minimum Deposit:</b> ₹{min_dep:.2f}\n"
+        f"⚠️ <b>Minimum Deposit:</b> {min_str}\n"
         f"💳 <b>Current Wallet Balance:</b> ₹{balance:,.2f}\n\n"
         "📋 <b>How to Pay:</b>\n"
         "1. Click <b>➕ Add Fund</b> below.\n"
@@ -147,11 +149,15 @@ async def handle_fund_enter_amount_click(query: CallbackQuery, state: FSMContext
     """Prompt user to type deposit amount."""
     await query.answer()
     await state.set_state(AddFundState.waiting_for_amount)
+    user = query.from_user
+    user_id = user.id if user else 0
+    is_admin = _is_admin(user_id)
     min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
+    min_line = "⚠️ <b>Minimum deposit: None (Admin: Any amount >= ₹1)</b>" if is_admin else f"⚠️ <b>Minimum deposit: ₹{int(min_dep)}</b>"
     prompt_text = (
         "💵 <b>Enter Deposit Amount</b>\n\n"
-        f"Please reply with the amount you wish to deposit in ₹ (e.g., <code>{int(min_dep)}</code>, <code>50</code>, <code>100</code>, <code>500</code>).\n\n"
-        f"⚠️ <b>Minimum deposit: ₹{min_dep:.2f}</b>\n"
+        f"Please reply with the amount you wish to deposit in ₹ (e.g., <code>1</code>, <code>10</code>, <code>50</code>, <code>100</code>).\n\n"
+        f"{min_line}\n"
         "<i>Send /cancel to abort at any time.</i>"
     )
     if query.message:
@@ -170,33 +176,43 @@ async def handle_cancel_add_fund(message: Message, state: FSMContext) -> None:
 async def process_deposit_amount(message: Message, state: FSMContext) -> None:
     """
     Validate numeric deposit amount server-side.
+    Admins can deposit any amount (no ₹30 limit).
     Generates dynamic TrueXGateway QR code with unique collision-free decimal amount.
     Auto-detects payments in real time and updates message in-place upon verification.
     """
     raw_text = (message.text or "").strip().replace(",", "").replace("₹", "").replace("INR", "").replace("Rp", "").strip()
-    min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
+    user = message.from_user
+    if not user:
+        await message.answer("User context missing.")
+        return
+
+    is_admin = _is_admin(user.id)
+    min_dep = 1.0 if is_admin else float(settings.MIN_DEPOSIT_AMOUNT)
 
     try:
         base_amount = float(raw_text)
         if base_amount <= 0:
             raise ValueError()
     except (ValueError, TypeError):
-        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter a valid number.")
+        if is_admin:
+            await message.answer("⚠️ Please enter a valid deposit amount greater than ₹0.")
+        else:
+            await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{int(min_dep)}. Please enter a valid number.")
         return
 
-    # Strictly reject below minimum
-    if base_amount < min_dep:
-        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter ₹{min_dep:.2f} or more.")
+    # Strictly reject below minimum for non-admin customers
+    if not is_admin and base_amount < min_dep:
+        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{int(min_dep)}. Please enter ₹{int(min_dep)} or more.")
+        return
+
+    # Gateway minimum is ₹1.00 for admin
+    if is_admin and base_amount < 1.0:
+        await message.answer("⚠️ Minimum amount supported by UPI payment gateway is ₹1.00. Please enter ₹1 or more.")
         return
 
     # Reject excessive deposit
     if base_amount > float(settings.MAX_DEPOSIT_AMOUNT):
         await message.answer(f"⚠️ Maximum single deposit amount is ₹{settings.MAX_DEPOSIT_AMOUNT:,.2f}. Please enter a smaller amount.")
-        return
-
-    user = message.from_user
-    if not user:
-        await message.answer("User context missing.")
         return
 
     status_msg = await message.answer("⏳ Generating dynamic UPI payment QR, please wait...")
@@ -257,17 +273,17 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
 
     qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
 
+    # Display amount without decimal in caption (e.g. ₹40), while actual QR contains unique decimal (e.g. 40.02)
+    display_amount = int(base_amount) if float(base_amount).is_integer() else f"{base_amount:.2f}"
+
     caption = (
-        f"💰 <b>Amount to Pay:</b> <code>₹{unique_amount:.2f}</code>\n"
+        f"💰 <b>Amount to Pay:</b> <code>₹{display_amount}</code>\n"
         f"🆔 <b>Order ID:</b> <code>{order_ref}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ <b>IMPORTANT INSTRUCTIONS:</b>\n"
-        f"• Pay the <b>EXACT amount</b> of <code>₹{unique_amount:.2f}</code> (including paise).\n"
-        "• Do NOT alter or round off the amount.\n"
-        "• Scan using Paytm, PhonePe, Google Pay, BHIM or any UPI app.\n\n"
-        "⚡ <b>Auto-Detection:</b>\n"
-        "Your payment will be <b>automatically detected & credited</b> within seconds!\n\n"
-        "⏳ <i>Waiting for payment confirmation...</i>"
+        "1. Scan the QR code with any UPI app (Paytm, PhonePe, GPay, BHIM).\n"
+        "2. Complete the transfer (amount is auto-filled from QR).\n"
+        "3. Funds are <b>automatically detected & credited</b> within seconds!\n\n"
+        "⏳ <i>Waiting for live bank confirmation...</i>"
     )
 
     kb = get_truex_payment_keyboard(txg_order_id, app_url=upi_intent or checkout_url)

@@ -43,6 +43,14 @@ async def test_calculate_unique_amount(seeded_db: AsyncSession):
     assert 50.01 <= unique_amt <= 50.99
     assert unique_amt != 50.0
 
+    # User entered 40 -> text shows without decimal (40), but actual unique QR amount has decimal (e.g. 40.xx)
+    base_amt = 40.0
+    display_amt = int(base_amt) if float(base_amt).is_integer() else f"{base_amt:.2f}"
+    actual_qr_amt = await TrueXGatewayService.calculate_unique_amount(seeded_db, base_amt)
+    assert display_amt == 40
+    assert 40.01 <= actual_qr_amt <= 40.99
+    assert actual_qr_amt != 40.0
+
     # User explicit decimal e.g. 1.02 -> keeps 1.02
     explicit_amt = await TrueXGatewayService.calculate_unique_amount(seeded_db, 1.02)
     assert explicit_amt == 1.02
@@ -65,16 +73,17 @@ async def test_deposit_creation_and_atomic_credit(seeded_db: AsyncSession):
     """
     Verify creating deposit request, approving it, atomic balance update,
     ledger entry, and idempotency (repeated approval must not double-credit).
+    Also verifies admin user can deposit small amounts (e.g. ₹1.02) without ₹30 limit.
     """
-    user_id = 99887766
-    await WalletService.get_or_create_customer(seeded_db, user_id, "test_txg_user")
-    initial_bal = await WalletService.get_balance(seeded_db, user_id)
+    admin_id = settings.TELEGRAM_ADMIN_USER_ID or 5232576810
+    await WalletService.get_or_create_customer(seeded_db, admin_id, "test_txg_admin")
+    initial_bal = await WalletService.get_balance(seeded_db, admin_id)
     assert initial_bal == 0.0
 
     order_ref = await TrueXGatewayService.generate_order_ref(seeded_db)
     deposit = await WalletService.create_deposit_request(
         db=seeded_db,
-        telegram_user_id=user_id,
+        telegram_user_id=admin_id,
         amount=1.02,
         reference=order_ref,
         txg_order_id="TXGTEST12345",
@@ -116,7 +125,7 @@ async def test_deposit_creation_and_atomic_credit(seeded_db: AsyncSession):
     assert success is True
 
     # Verify wallet balance credited
-    new_bal = await WalletService.get_balance(seeded_db, user_id)
+    new_bal = await WalletService.get_balance(seeded_db, admin_id)
     assert new_bal == 1.02
 
     # Verify ledger entry
@@ -136,7 +145,7 @@ async def test_deposit_creation_and_atomic_credit(seeded_db: AsyncSession):
         db=seeded_db
     )
     assert success_duplicate is False
-    bal_after_duplicate = await WalletService.get_balance(seeded_db, user_id)
+    bal_after_duplicate = await WalletService.get_balance(seeded_db, admin_id)
     assert bal_after_duplicate == 1.02  # Still 1.02, never 2.04!
 
 

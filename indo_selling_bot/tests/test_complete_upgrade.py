@@ -206,6 +206,16 @@ async def test_minimum_deposit_validation(upgrade_db: AsyncSession):
     )
     assert dep500.amount == 500
 
+    # Admin user can deposit any amount (e.g. ₹1.02, ₹5) with NO limit of ₹30
+    admin_id = settings.TELEGRAM_ADMIN_USER_ID or 5232576810
+    dep_admin = await WalletService.create_deposit_request(
+        db=upgrade_db,
+        telegram_user_id=admin_id,
+        amount=1.02
+    )
+    assert dep_admin.amount == 1.02
+    assert dep_admin.status == "PENDING_PAYMENT"
+
 
 # ==========================================
 # 3. Dynamic UPI QR Code Generation
