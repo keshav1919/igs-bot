@@ -320,28 +320,50 @@ class TrueXGatewayService:
         )
 
         # ----------------------------------------------------
-        # 1. Clean up QR message & send payment success notification text
+        # 1. Update the original QR message with Image 2 + text (in-place)
         # ----------------------------------------------------
         success_caption = format_success_caption(deposit.amount, deposit.reference, paid_at_dt)
+        success_img = settings.SUCCESS_IMAGE_PATH
+        if not success_img.exists():
+            success_img = Path("assets/payment_success.png")
 
-        if deposit.chat_id and deposit.message_id:
+        edited_ok = False
+        if deposit.chat_id and deposit.message_id and success_img.exists():
             try:
-                await bot.delete_message(chat_id=deposit.chat_id, message_id=deposit.message_id)
-            except Exception as del_err:
-                logger.warning(f"Could not delete QR message {deposit.message_id}: {del_err}")
-
-        # Send exact success text
-        if deposit.chat_id:
-            try:
-                await bot.send_message(
-                    chat_id=deposit.chat_id,
-                    text=success_caption
+                media = InputMediaPhoto(
+                    media=FSInputFile(str(success_img)),
+                    caption=success_caption
                 )
+                await bot.edit_message_media(
+                    chat_id=deposit.chat_id,
+                    message_id=deposit.message_id,
+                    media=media,
+                    reply_markup=None
+                )
+                edited_ok = True
+                logger.info(f"Updated QR message {deposit.message_id} with success image.")
+            except Exception as edit_err:
+                logger.warning(f"Could not edit QR message media: {edit_err}")
+
+        # Fallback ONLY if original message was deleted or edit failed
+        if not edited_ok and deposit.chat_id:
+            try:
+                if success_img.exists():
+                    await bot.send_photo(
+                        chat_id=deposit.chat_id,
+                        photo=FSInputFile(str(success_img)),
+                        caption=success_caption
+                    )
+                else:
+                    await bot.send_message(
+                        chat_id=deposit.chat_id,
+                        text=success_caption
+                    )
             except Exception as send_err:
-                logger.error(f"Failed sending success text message: {send_err}")
+                logger.error(f"Fallback send failed: {send_err}")
 
         # ----------------------------------------------------
-        # 2. Send the Doge Sticker (1st row 4th sticker from @ExTechie)
+        # 2. Send the Doge Sticker below the updated message
         # ----------------------------------------------------
         if deposit.chat_id:
             sticker_sent = False
