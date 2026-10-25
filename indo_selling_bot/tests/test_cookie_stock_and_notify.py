@@ -49,17 +49,18 @@ def test_cookie_stock_import_service_parsing():
     assert "datr=qz7aauQ_u1SS08ASlbYivwN5" in extra["cookie"]
 
 
-def test_notify_keyboard_and_text():
-    assert "cookie login Indo igs" in BUY_INDO_NOTIFY_TEXT
-    assert "pre Suspend gurente" in BUY_INDO_NOTIFY_TEXT
+@pytest.mark.asyncio
+async def test_buy_indo_menu_shows_categories_directly():
+    from unittest.mock import AsyncMock
+    from indo_selling_bot.bot.handlers.buy_indo import handle_buy_indo_menu
 
-    kb = get_buy_indo_notify_keyboard()
-    flat_btns = [btn for row in kb.inline_keyboard for btn in row]
-    btn_texts = [b.text for b in flat_btns]
-    btn_cbs = [b.callback_data for b in flat_btns]
+    mock_msg = AsyncMock()
+    await handle_buy_indo_menu(mock_msg)
 
-    assert "buy  igs" in btn_texts
-    assert "open_buy_categories" in btn_cbs
+    mock_msg.answer.assert_called_once()
+    text = mock_msg.answer.call_args[0][0]
+    assert "cookie login Indo igs" not in text
+    assert ("Select  Indo" in text) or ("out of stock" in text)
 
 
 def test_delivery_message_includes_cookie_and_raw_line():

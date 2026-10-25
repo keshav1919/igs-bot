@@ -27,8 +27,6 @@ from indo_selling_bot.models.order import Order, OrderItem
 from indo_selling_bot.bot.keyboards import (
     get_available_buy_categories_keyboard,
     get_buy_quantity_keyboard,
-    BUY_INDO_NOTIFY_TEXT,
-    get_buy_indo_notify_keyboard,
 )
 from indo_selling_bot.config import settings
 
@@ -352,39 +350,30 @@ async def send_customer_delivery(
 @buy_indo_router.message(Command("buy"))
 @buy_indo_router.message(Command("catalog"))
 async def handle_buy_indo_menu(message: Message, state: FSMContext | None = None) -> None:
-    """Show intermediate notification message before purchasing Indo accounts."""
+    """Display available age categories directly with genuine stock from stock.txt."""
     if state:
         await state.clear()
 
+    available_cats = StockTxtService.get_available_categories()
+
+    if not available_cats:
+        text = "📦 All categories are currently out of stock. Please check again later."
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="« Back to Main Menu", callback_data="back_to_main", style="danger")]
+        ])
+    else:
+        text = "🛒  Select  Indo"
+        kb = get_available_buy_categories_keyboard(available_cats)
+
     await message.answer(
-        BUY_INDO_NOTIFY_TEXT,
-        reply_markup=get_buy_indo_notify_keyboard()
+        text,
+        reply_markup=kb
     )
 
 
-@buy_indo_router.callback_query(F.data.in_({"buy_indo_notify", "back_to_buy_indo"}))
-async def handle_buy_indo_notify_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
-    """Show intermediate notification message when tapping Buy Indo in inline menus."""
-    await query.answer()
-    if state:
-        await state.clear()
-
-    if query.message:
-        try:
-            await query.message.edit_text(
-                BUY_INDO_NOTIFY_TEXT,
-                reply_markup=get_buy_indo_notify_keyboard()
-            )
-        except Exception:
-            await query.message.answer(
-                BUY_INDO_NOTIFY_TEXT,
-                reply_markup=get_buy_indo_notify_keyboard()
-            )
-
-
-@buy_indo_router.callback_query(F.data == "open_buy_categories")
+@buy_indo_router.callback_query(F.data.in_({"open_buy_categories", "buy_indo_notify", "back_to_buy_indo"}))
 async def handle_open_buy_categories_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
-    """Display available age categories after customer taps 'buy  igs'."""
+    """Display available age categories directly when navigating or returning to Indo catalog."""
     await query.answer()
     if state:
         await state.clear()
