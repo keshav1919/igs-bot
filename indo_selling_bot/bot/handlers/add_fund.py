@@ -216,7 +216,7 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         await message.answer(f"⚠️ Maximum single deposit amount is ₹{settings.MAX_DEPOSIT_AMOUNT:,.2f}. Please enter a smaller amount.")
         return
 
-    status_msg = await message.answer("⏳ Generating dynamic UPI payment QR, please wait...")
+    status_msg = await message.answer("Please wait...")
 
     async with AsyncSessionLocal() as db:
         unique_amount = await TrueXGatewayService.calculate_unique_amount(db, base_amount)
@@ -287,7 +287,7 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         "⏳ <i>Waiting for live bank confirmation...</i>"
     )
 
-    kb = get_truex_payment_keyboard(txg_order_id, app_url=upi_intent or checkout_url)
+    kb = get_truex_payment_keyboard(txg_order_id, app_url=checkout_url)
     try:
         await status_msg.delete()
     except Exception:

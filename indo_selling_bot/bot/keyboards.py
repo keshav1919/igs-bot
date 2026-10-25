@@ -238,14 +238,14 @@ def get_truex_payment_keyboard(txg_order_id: str, app_url: str | None = None) ->
     """
     Inline keyboard displayed with dynamic TrueXGateway QR code:
     - 🔄 Check Payment Status
-    - 📲 Open UPI App (if app_url available)
+    - 🌐 Pay via UPI / Web (only if http/https url)
     - ❌ Cancel Payment
     """
     rows = [
         [InlineKeyboardButton(text="🔄 Check Payment Status", callback_data=f"txg_chk:{txg_order_id}")]
     ]
-    if app_url:
-        rows.append([InlineKeyboardButton(text="📲 Open UPI App", url=app_url)])
+    if app_url and (app_url.startswith("http://") or app_url.startswith("https://")):
+        rows.append([InlineKeyboardButton(text="🌐 Pay via UPI / Web", url=app_url)])
     rows.append([InlineKeyboardButton(text="❌ Cancel Payment", callback_data=f"txg_cnc:{txg_order_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
