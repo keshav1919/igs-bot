@@ -67,6 +67,9 @@ async def run_telegram_bot():
         app.state.bot_running = True
         app.state.bot_error = None
 
+        from indo_selling_bot.services.truex_service import polling_manager
+        asyncio.create_task(polling_manager.resume_all_pending(bot))
+
         await dp.start_polling(
             bot,
             allowed_updates=dp.resolve_used_update_types(),

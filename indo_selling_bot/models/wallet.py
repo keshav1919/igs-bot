@@ -4,7 +4,7 @@ Implements immutable financial ledger, check constraints, and customer tracking.
 """
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text, BigInteger, Integer, DateTime, ForeignKey, Index, CheckConstraint
+from sqlalchemy import String, Text, BigInteger, Integer, Float, DateTime, ForeignKey, Index, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from indo_selling_bot.database import Base
 
@@ -34,7 +34,7 @@ class Wallet(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("customers.telegram_id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
-    balance: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    balance: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="INR", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -62,7 +62,7 @@ class Wallet(Base):
 
     @property
     def formatted_balance(self) -> str:
-        return f"{self.currency} {self.balance:,.0f}"
+        return f"{self.currency} {self.balance:,.2f}"
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
@@ -71,8 +71,8 @@ class WalletTransaction(Base):
     wallet_id: Mapped[int] = mapped_column(ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
     tx_type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)  # 'DEPOSIT', 'PURCHASE', 'REFUND', 'ADJUSTMENT'
-    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)  # Positive for credit, negative for debit
-    balance_after: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # Positive for credit, negative for debit
+    balance_after: Mapped[float] = mapped_column(Float, nullable=False)
     reference: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     admin_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -91,11 +91,14 @@ class DepositRequest(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     reference: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
-    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="INR", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="PENDING", index=True, nullable=False)  # 'PENDING', 'APPROVED', 'REJECTED'
     utr_number: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
     screenshot_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    txg_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     admin_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

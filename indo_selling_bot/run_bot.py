@@ -70,6 +70,9 @@ async def main():
 
     logger.info(f"[*] Starting aiogram 3 polling for bot [{settings.mask_token(settings.TELEGRAM_BOT_TOKEN)}]...")
     try:
+        from indo_selling_bot.services.truex_service import polling_manager
+        asyncio.create_task(polling_manager.resume_all_pending(bot))
+
         await dp.start_polling(
             bot,
             allowed_updates=dp.resolve_used_update_types(),

@@ -129,18 +129,42 @@ class Settings:
     # Business Timezone & Locale Settings
     BUSINESS_TIMEZONE: str = os.getenv("BUSINESS_TIMEZONE", "Asia/Kolkata")
 
+    # TrueXGateway UPI Auto-Detection Gateway Settings
+    TRUEXGATEWAY_API_KEY: str = os.getenv("TRUEXGATEWAY_API_KEY", "txg_live_d5611888f69312c06d4e3faad5b32c59d24083b5d3c90330")
+    TRUEXGATEWAY_BASE_URL: str = os.getenv("TRUEXGATEWAY_BASE_URL", "http://truexgateway.xyz/api")
+    MIN_DEPOSIT_AMOUNT: float = float(os.getenv("MIN_DEPOSIT_AMOUNT", "1.0"))
+    MAX_DEPOSIT_AMOUNT: float = float(os.getenv("MAX_DEPOSIT_AMOUNT", "100000.0"))
+    SUCCESS_STICKER_FILE_ID: str = os.getenv("SUCCESS_STICKER_FILE_ID", "")
+
+    @property
+    def SUCCESS_IMAGE_PATH(self) -> Path:
+        cand = BASE_DIR / "assets" / "payment_success.png"
+        if cand.exists():
+            return cand
+        cand_parent = BASE_DIR.parent / "assets" / "payment_success.png"
+        if cand_parent.exists():
+            return cand_parent
+        return cand
+
+    @property
+    def SUCCESS_STICKER_PATH(self) -> Path:
+        cand = BASE_DIR / "assets" / "payment_success_sticker.webp"
+        if cand.exists():
+            return cand
+        cand_parent = BASE_DIR.parent / "assets" / "payment_success_sticker.webp"
+        if cand_parent.exists():
+            return cand_parent
+        return cand
+
     # Business UPI & Payment Configuration Defaults
     PAYMENT_UPI_ID: str = os.getenv("PAYMENT_UPI_ID", os.getenv("DEFAULT_UPI_ID", "paytm.s1x87m2@pty"))
     DEFAULT_UPI_ID: str = PAYMENT_UPI_ID
     DEFAULT_UPI_NAME: str = os.getenv("DEFAULT_UPI_NAME", "Legend Indo Official")
-    MIN_DEPOSIT_AMOUNT: float = float(os.getenv("MIN_DEPOSIT_AMOUNT", "30.0"))
-    MAX_DEPOSIT_AMOUNT: float = float(os.getenv("MAX_DEPOSIT_AMOUNT", "100000.0"))
     DEFAULT_PAYMENT_INSTRUCTIONS: str = os.getenv(
         "DEFAULT_PAYMENT_INSTRUCTIONS",
-        "1. Scan the dynamic UPI QR code or pay via UPI ID above.\n"
-        "2. Complete the transfer using your UPI app (Paytm, GPay, PhonePe).\n"
-        "3. Upload a payment screenshot in this chat for verification.\n"
-        "4. Funds are credited upon authorized administrator verification."
+        "1. Scan the dynamic UPI QR code with any UPI app.\n"
+        "2. Pay the exact decimal amount.\n"
+        "3. Funds are credited automatically upon live bank verification."
     )
 
     # Web Admin (Render sets PORT and binds to 0.0.0.0)

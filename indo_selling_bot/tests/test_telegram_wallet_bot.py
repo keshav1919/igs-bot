@@ -293,7 +293,7 @@ async def test_wallet_deposit_lifecycle_and_idempotent_approval(wallet_db: Async
     )
     await wallet_db.commit()
 
-    assert deposit.reference.startswith(("DEP-", "PAY-"))
+    assert deposit.reference.startswith(("DEP-", "PAY-", "TG_PAY_"))
     assert deposit.status in ("PENDING", "PENDING_PAYMENT")
     assert deposit.amount == 50000
 

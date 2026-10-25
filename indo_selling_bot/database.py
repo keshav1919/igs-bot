@@ -47,9 +47,16 @@ async def init_db() -> None:
             await conn.exec_driver_sql("PRAGMA mmap_size = 268435456;") # 256MB memory mapped I/O
         await conn.run_sync(Base.metadata.create_all)
 
-        # Reset all user funds to 0 as requested
+        # Migrate deposit_requests table columns if missing
         try:
-            await conn.exec_driver_sql("UPDATE wallets SET balance = 0;")
+            res = await conn.exec_driver_sql("PRAGMA table_info(deposit_requests);")
+            cols = [row[1] for row in res.fetchall()]
+            if "txg_order_id" not in cols:
+                await conn.exec_driver_sql("ALTER TABLE deposit_requests ADD COLUMN txg_order_id VARCHAR(64);")
+            if "message_id" not in cols:
+                await conn.exec_driver_sql("ALTER TABLE deposit_requests ADD COLUMN message_id BIGINT;")
+            if "chat_id" not in cols:
+                await conn.exec_driver_sql("ALTER TABLE deposit_requests ADD COLUMN chat_id BIGINT;")
         except Exception:
             pass
 

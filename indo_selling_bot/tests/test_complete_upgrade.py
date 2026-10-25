@@ -162,14 +162,15 @@ async def test_minimum_deposit_validation(upgrade_db: AsyncSession):
     """
     user_id = 1234567
 
-    # ₹29 MUST BE REJECTED
+    # Below minimum deposit MUST BE REJECTED
+    min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
     with pytest.raises(ValueError) as excinfo:
         await WalletService.create_deposit_request(
             db=upgrade_db,
             telegram_user_id=user_id,
-            amount=29
+            amount=min_dep - 0.5 if min_dep > 0.5 else 0.0
         )
-    assert "Minimum Add Fund Amount is ₹30" in str(excinfo.value)
+    assert "Minimum Add Fund Amount" in str(excinfo.value)
 
     # ₹0 MUST BE REJECTED
     with pytest.raises(ValueError):
@@ -195,7 +196,7 @@ async def test_minimum_deposit_validation(upgrade_db: AsyncSession):
     )
     assert dep30.amount == 30
     assert dep30.status == "PENDING_PAYMENT"
-    assert dep30.reference.startswith(("PAY-", "DEP-"))
+    assert dep30.reference.startswith(("PAY-", "DEP-", "TG_PAY_"))
 
     # Higher amount (₹500) MUST BE ACCEPTED
     dep500 = await WalletService.create_deposit_request(

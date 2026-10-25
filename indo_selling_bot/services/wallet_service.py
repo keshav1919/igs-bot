@@ -69,16 +69,20 @@ class WalletService:
         return wallet
 
     @staticmethod
-    async def get_balance(db: AsyncSession, telegram_user_id: int) -> int:
+    async def get_balance(db: AsyncSession, telegram_user_id: int) -> float:
         """Get current confirmed wallet balance."""
         wallet = await WalletService.get_or_create_wallet(db, telegram_user_id)
-        return wallet.balance
+        return float(wallet.balance)
 
     @staticmethod
     async def create_deposit_request(
         db: AsyncSession,
         telegram_user_id: int,
-        amount: int,
+        amount: float,
+        reference: str | None = None,
+        txg_order_id: str | None = None,
+        message_id: int | None = None,
+        chat_id: int | None = None,
         currency: str | None = None,
         utr_number: str | None = None,
         screenshot_file_id: str | None = None,
@@ -88,24 +92,21 @@ class WalletService:
     ) -> DepositRequest:
         """
         Create a unique pending deposit request.
-        Enforces minimum deposit of ₹30 on the server side.
-        Funds are NOT credited until verified by an authorized administrator.
         """
-        min_dep = int(settings.MIN_DEPOSIT_AMOUNT)
+        min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
         if amount < min_dep:
-            raise ValueError(f"Minimum Add Fund Amount is ₹{min_dep}. Please enter ₹{min_dep} or more.")
+            raise ValueError(f"Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter ₹{min_dep:.2f} or more.")
 
         await WalletService.get_or_create_customer(db, telegram_user_id, username, first_name)
-
         curr = currency or settings.DEFAULT_CURRENCY
 
-        # Generate unique deposit reference e.g. PAY-782910
-        ref = f"PAY-{secrets.randbelow(900000) + 100000}"
-        for _ in range(5):
-            existing = (await db.execute(select(DepositRequest).where(DepositRequest.reference == ref))).scalar_one_or_none()
-            if not existing:
-                break
-            ref = f"PAY-{secrets.randbelow(900000) + 100000}"
+        if not reference:
+            chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            code = "".join(secrets.choice(chars) for _ in range(8))
+            num = secrets.randbelow(900) + 100
+            ref = f"TG_PAY_{code}_{num}"
+        else:
+            ref = reference
 
         deposit = DepositRequest(
             reference=ref,
@@ -115,6 +116,9 @@ class WalletService:
             status=initial_status,
             utr_number=utr_number.strip() if utr_number else None,
             screenshot_file_id=screenshot_file_id,
+            txg_order_id=txg_order_id,
+            message_id=message_id,
+            chat_id=chat_id,
             created_at=datetime.now(timezone.utc)
         )
         db.add(deposit)

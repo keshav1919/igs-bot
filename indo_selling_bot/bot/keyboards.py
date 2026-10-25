@@ -228,11 +228,26 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
 def get_deposit_request_keyboard(deposit_ref: str | None = None) -> InlineKeyboardMarkup:
     """
     Customer actions when viewing active payment request with QR code:
-    Shows ONLY the Back button. Customer sends screenshot directly in chat.
+    Shows ONLY the Back button.
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Back", callback_data="cancel_payment", style="danger")]
     ])
+
+def get_truex_payment_keyboard(txg_order_id: str, app_url: str | None = None) -> InlineKeyboardMarkup:
+    """
+    Inline keyboard displayed with dynamic TrueXGateway QR code:
+    - 🔄 Check Payment Status
+    - 📲 Open UPI App (if app_url available)
+    - ❌ Cancel Payment
+    """
+    rows = [
+        [InlineKeyboardButton(text="🔄 Check Payment Status", callback_data=f"txg_chk:{txg_order_id}")]
+    ]
+    if app_url:
+        rows.append([InlineKeyboardButton(text="📲 Open UPI App", url=app_url)])
+    rows.append([InlineKeyboardButton(text="❌ Cancel Payment", callback_data=f"txg_cnc:{txg_order_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def get_admin_deposit_review_keyboard(deposit_ref: str) -> InlineKeyboardMarkup:
     """Admin quick actions for verified approval or rejection of payment."""

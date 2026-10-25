@@ -26,12 +26,16 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from sqlalchemy import select, update
 from indo_selling_bot.database import AsyncSessionLocal
+from indo_selling_bot.models.wallet import DepositRequest
 from indo_selling_bot.services.wallet_service import WalletService
 from indo_selling_bot.services.payment_setting_service import PaymentSettingService
+from indo_selling_bot.services.truex_service import TrueXGatewayService, polling_manager
 from indo_selling_bot.bot.keyboards import (
     get_add_fund_keyboard,
     get_deposit_request_keyboard,
+    get_truex_payment_keyboard,
     get_admin_deposit_review_keyboard,
     get_my_wallet_keyboard,
     get_main_reply_keyboard,
@@ -77,22 +81,23 @@ def generate_upi_qr_bytes(upi_id: str, payee_name: str, amount: float, ref_id: s
 # 1. Add Fund Main Information Screen
 # ==========================================
 async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int) -> None:
-    """Helper to display business payment instructions and ₹30 minimum requirement."""
+    """Helper to display business payment instructions and minimum requirement."""
     async with AsyncSessionLocal() as db:
         balance = await WalletService.get_balance(db, user_id)
 
-    min_dep = int(settings.MIN_DEPOSIT_AMOUNT)
+    min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
 
     text = (
-        "💰 Add Funds to Your Wallet\n\n\n"
-        f"⚠️ Minimum Deposit: ₹{min_dep}\n"
-        f"💳 Current Wallet Balance: ₹{balance:,.2f}\n\n"
-        "📋 How to Pay:\n"
-        "1. Scan the QR code .\n"
-        "2. Complete the Payment.\n"
-        "3. Upload a payment screenshot.\n"
-        "4. Funds are credited .\n\n"
-        "Click ➕  Add Fund   to generate your QR:"
+        "💰 <b>Add Funds to Your Wallet</b>\n\n\n"
+        f"⚠️ <b>Minimum Deposit:</b> ₹{min_dep:.2f}\n"
+        f"💳 <b>Current Wallet Balance:</b> ₹{balance:,.2f}\n\n"
+        "📋 <b>How to Pay:</b>\n"
+        "1. Click <b>➕ Add Fund</b> below.\n"
+        "2. Enter deposit amount.\n"
+        "3. Scan the dynamic QR code with any UPI app.\n"
+        "4. Pay the exact decimal amount.\n"
+        "5. <b>Automatic Verification:</b> Funds credit automatically!\n\n"
+        "Click ➕ <b>Add Fund</b> to generate your QR:"
     )
 
     keyboard = get_add_fund_keyboard()
@@ -104,14 +109,14 @@ async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int) -> 
             pass
         if target.message:
             try:
-                await target.message.edit_text(text, reply_markup=keyboard)
+                await target.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
             except Exception:
                 try:
-                    await target.message.answer(text, reply_markup=keyboard)
+                    await target.message.answer(text, parse_mode="HTML", reply_markup=keyboard)
                 except Exception:
                     pass
     else:
-        await target.answer(text, reply_markup=keyboard)
+        await target.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @add_fund_router.message(F.text == "💰 Add Fund")
@@ -142,15 +147,15 @@ async def handle_fund_enter_amount_click(query: CallbackQuery, state: FSMContext
     """Prompt user to type deposit amount."""
     await query.answer()
     await state.set_state(AddFundState.waiting_for_amount)
-    min_dep = int(settings.MIN_DEPOSIT_AMOUNT)
+    min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
     prompt_text = (
-        "💵 *Enter Deposit Amount*\n\n"
-        f"Please reply with the exact amount you wish to deposit in ₹ (e.g., `30`, `50`, `100`, `500`).\n\n"
-        f"⚠️ *Minimum deposit: ₹{min_dep}*\n"
-        "_Send /cancel to abort at any time._"
+        "💵 <b>Enter Deposit Amount</b>\n\n"
+        f"Please reply with the amount you wish to deposit in ₹ (e.g., <code>{int(min_dep)}</code>, <code>50</code>, <code>100</code>, <code>500</code>).\n\n"
+        f"⚠️ <b>Minimum deposit: ₹{min_dep:.2f}</b>\n"
+        "<i>Send /cancel to abort at any time.</i>"
     )
     if query.message:
-        await query.message.answer(prompt_text, parse_mode="Markdown")
+        await query.message.answer(prompt_text, parse_mode="HTML")
 
 
 @add_fund_router.message(AddFundState.waiting_for_amount, Command("cancel"))
@@ -165,30 +170,28 @@ async def handle_cancel_add_fund(message: Message, state: FSMContext) -> None:
 async def process_deposit_amount(message: Message, state: FSMContext) -> None:
     """
     Validate numeric deposit amount server-side.
-    Strictly enforces:
-    - ₹29 and below is rejected with: '⚠️ Minimum Add Fund Amount is ₹30. Please enter ₹30 or more.'
-    - ₹30 and above is accepted.
-    - Generates dynamic QR code and sets PENDING_PAYMENT status.
+    Generates dynamic TrueXGateway QR code with unique collision-free decimal amount.
+    Auto-detects payments in real time and updates message in-place upon verification.
     """
     raw_text = (message.text or "").strip().replace(",", "").replace("₹", "").replace("INR", "").replace("Rp", "").strip()
-    min_dep = int(settings.MIN_DEPOSIT_AMOUNT)
+    min_dep = float(settings.MIN_DEPOSIT_AMOUNT)
 
     try:
-        amount = int(float(raw_text))
-        if amount <= 0:
+        base_amount = float(raw_text)
+        if base_amount <= 0:
             raise ValueError()
     except (ValueError, TypeError):
-        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep}. Please enter ₹{min_dep} or more.")
+        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter a valid number.")
         return
 
     # Strictly reject below minimum
-    if amount < min_dep:
-        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep}. Please enter ₹{min_dep} or more.")
+    if base_amount < min_dep:
+        await message.answer(f"⚠️ Minimum Add Fund Amount is ₹{min_dep:.2f}. Please enter ₹{min_dep:.2f} or more.")
         return
 
     # Reject excessive deposit
-    if amount > int(settings.MAX_DEPOSIT_AMOUNT):
-        await message.answer(f"⚠️ Maximum single deposit amount is ₹{int(settings.MAX_DEPOSIT_AMOUNT):,}. Please enter a smaller amount.")
+    if base_amount > float(settings.MAX_DEPOSIT_AMOUNT):
+        await message.answer(f"⚠️ Maximum single deposit amount is ₹{settings.MAX_DEPOSIT_AMOUNT:,.2f}. Please enter a smaller amount.")
         return
 
     user = message.from_user
@@ -196,47 +199,167 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         await message.answer("User context missing.")
         return
 
+    status_msg = await message.answer("⏳ Generating dynamic UPI payment QR, please wait...")
+
+    async with AsyncSessionLocal() as db:
+        unique_amount = await TrueXGatewayService.calculate_unique_amount(db, base_amount)
+        order_ref = await TrueXGatewayService.generate_order_ref(db)
+
+    try:
+        order_data = await TrueXGatewayService.create_order(
+            amount=unique_amount,
+            order_ref=order_ref,
+            description=f"Indo Topup {order_ref}"
+        )
+    except Exception as err:
+        logger.error(f"TrueXGateway create-order failed: {err}")
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        await message.answer(f"❌ Failed to generate payment order: {err}\nPlease try again.")
+        return
+
+    txg_order_id = order_data.get("orderId") or ""
+    qr_url = order_data.get("qrUrl")
+    upi_intent = order_data.get("upiIntent") or order_data.get("appUpiIntent")
+    checkout_url = order_data.get("checkoutUrl")
+
+    try:
+        qr_bytes = await TrueXGatewayService.fetch_qr_image_bytes(
+            txg_order_id=txg_order_id,
+            qr_url_fallback=qr_url,
+            upi_intent=upi_intent
+        )
+    except Exception as qr_err:
+        logger.error(f"Failed to fetch QR image bytes: {qr_err}")
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        await message.answer("❌ Could not retrieve QR code image from gateway. Please try again.")
+        return
+
     # Create DepositRequest in DB
     async with AsyncSessionLocal() as db:
         deposit = await WalletService.create_deposit_request(
             db=db,
             telegram_user_id=user.id,
-            amount=amount,
+            amount=unique_amount,
+            reference=order_ref,
+            txg_order_id=txg_order_id,
             currency="₹",
             username=user.username,
             first_name=user.first_name,
             initial_status="PENDING_PAYMENT"
         )
-        payment_info = await PaymentSettingService.get_settings(db)
         await db.commit()
 
-    upi_id = payment_info.get("upi_id") or settings.PAYMENT_UPI_ID
-    payee_name = payment_info.get("payee_name") or settings.DEFAULT_UPI_NAME
-
-    # Save active reference in state and transition to waiting for screenshot immediately
-    await state.set_state(AddFundState.waiting_for_screenshot)
-    await state.update_data(deposit_ref=deposit.reference)
-
-    # Generate dynamic UPI QR image bytes
-    qr_bytes = generate_upi_qr_bytes(
-        upi_id=upi_id,
-        payee_name=payee_name,
-        amount=float(amount),
-        ref_id=deposit.reference
-    )
-    qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{deposit.reference}.png")
+    qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
 
     caption = (
-        f"💰 Amount to Pay: ₹{amount:,.2f}\n\n"
-        "⏳ Status: PENDING PAYMENT\n"
+        f"💰 <b>Amount to Pay:</b> <code>₹{unique_amount:.2f}</code>\n"
+        f"🆔 <b>Order ID:</b> <code>{order_ref}</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "1. Scan the QR code\n"
-        "2. Send your payment screenshot in this chat \n"
-        "3. Use Indo and injoy"
+        "⚠️ <b>IMPORTANT INSTRUCTIONS:</b>\n"
+        f"• Pay the <b>EXACT amount</b> of <code>₹{unique_amount:.2f}</code> (including paise).\n"
+        "• Do NOT alter or round off the amount.\n"
+        "• Scan using Paytm, PhonePe, Google Pay, BHIM or any UPI app.\n\n"
+        "⚡ <b>Auto-Detection:</b>\n"
+        "Your payment will be <b>automatically detected & credited</b> within seconds!\n\n"
+        "⏳ <i>Waiting for payment confirmation...</i>"
     )
 
-    kb = get_deposit_request_keyboard(deposit.reference)
-    await message.answer_photo(photo=qr_file, caption=caption, parse_mode="HTML", reply_markup=kb)
+    kb = get_truex_payment_keyboard(txg_order_id, app_url=upi_intent or checkout_url)
+    try:
+        await status_msg.delete()
+    except Exception:
+        pass
+
+    qr_msg = await message.answer_photo(photo=qr_file, caption=caption, parse_mode="HTML", reply_markup=kb)
+
+    # Save message_id and chat_id in database for in-place success editing
+    async with AsyncSessionLocal() as db:
+        stmt = (
+            update(DepositRequest)
+            .where(DepositRequest.reference == order_ref)
+            .values(message_id=qr_msg.message_id, chat_id=qr_msg.chat.id)
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+    await state.clear()
+
+    # Launch background polling task for auto-detection
+    if message.bot:
+        await polling_manager.start_polling(
+            bot=message.bot,
+            txg_order_id=txg_order_id,
+            order_ref=order_ref
+        )
+
+
+@add_fund_router.callback_query(F.data.startswith("txg_chk:"))
+async def handle_txg_check_payment(query: CallbackQuery) -> None:
+    """Manual status check button clicked by customer on QR screen."""
+    txg_order_id = query.data.split(":")[1]
+    async with AsyncSessionLocal() as db:
+        stmt = select(DepositRequest).where(DepositRequest.txg_order_id == txg_order_id)
+        dep = (await db.execute(stmt)).scalar_one_or_none()
+
+    if not dep:
+        await query.answer("Payment order not found.", show_alert=True)
+        return
+
+    if dep.status in ("APPROVED", "SUCCESS"):
+        await query.answer("✅ Payment already verified and credited to your wallet!", show_alert=True)
+        return
+
+    try:
+        data = await TrueXGatewayService.check_payment_status(txg_order_id)
+        status = (data.get("status") or "").lower()
+        verified = data.get("verified") is True
+        if status == "success" or verified:
+            await query.answer("✅ Payment verified! Crediting wallet...")
+            utr = data.get("utr") or ""
+            if query.bot:
+                await TrueXGatewayService.process_successful_payment(
+                    bot=query.bot,
+                    order_ref=dep.reference,
+                    utr=utr,
+                    txg_order_id=txg_order_id
+                )
+        else:
+            msg = data.get("message") or "Waiting for live bank confirmation..."
+            await query.answer(f"⏳ Payment not detected yet.\n\nStatus: {msg}\nPlease ensure you transferred exact ₹{dep.amount:.2f}.", show_alert=True)
+    except Exception as err:
+        logger.error(f"Error checking status for {txg_order_id}: {err}")
+        await query.answer("⚠️ Could not verify status right now. Please try again in 5 seconds.", show_alert=True)
+
+
+@add_fund_router.callback_query(F.data.startswith("txg_cnc:"))
+async def handle_txg_cancel_payment(query: CallbackQuery) -> None:
+    """Customer clicked Cancel on TrueXGateway payment QR screen."""
+    txg_order_id = query.data.split(":")[1]
+    await polling_manager.stop_polling(txg_order_id)
+    async with AsyncSessionLocal() as db:
+        stmt = select(DepositRequest).where(DepositRequest.txg_order_id == txg_order_id)
+        dep = (await db.execute(stmt)).scalar_one_or_none()
+        if dep and dep.status in ("PENDING", "PENDING_PAYMENT"):
+            dep.status = "CANCELLED"
+            await db.commit()
+
+    await query.answer("❌ Payment cancelled.")
+    user = query.from_user
+    user_id = user.id if user else 0
+    try:
+        if query.message:
+            await query.message.delete()
+    except Exception:
+        pass
+    kb = get_main_reply_keyboard(is_admin=settings.is_admin(user_id))
+    if query.message:
+        await query.message.answer("❌ Payment cancelled. Returning to main menu.", reply_markup=kb)
 
 
 @add_fund_router.callback_query(F.data == "cancel_payment")
@@ -367,19 +490,31 @@ async def _process_customer_screenshot(message: Message, state: FSMContext, file
 @add_fund_router.message(AddFundState.waiting_for_amount, F.photo)
 @add_fund_router.message(F.photo)
 async def handle_payment_screenshot_photo(message: Message, state: FSMContext) -> None:
-    """Process customer uploaded payment screenshot photo."""
-    photo = message.photo[-1]
-    await _process_customer_screenshot(message, state, photo.file_id)
+    """Inform customer that manual screenshot upload is not needed; payments auto-detect."""
+    user = message.from_user
+    if not user:
+        return
+    await message.answer(
+        "ℹ️ <b>Payment Screenshot Not Needed!</b>\n\n"
+        "Payments made via our dynamic UPI QR code are <b>automatically detected & credited</b> within seconds.\n\n"
+        "Please ensure you transferred the <b>exact decimal amount</b> shown on your QR code. Your balance will update automatically upon bank confirmation.",
+        parse_mode="HTML"
+    )
 
 
 @add_fund_router.message(AddFundState.waiting_for_screenshot, F.document)
 @add_fund_router.message(AddFundState.waiting_for_amount, F.document)
 @add_fund_router.message(F.document)
 async def handle_payment_screenshot_document(message: Message, state: FSMContext) -> None:
-    """Process customer uploaded payment screenshot image document."""
+    """Inform customer that manual screenshot upload is not needed."""
     doc = message.document
     if doc and doc.mime_type and doc.mime_type.startswith("image/"):
-        await _process_customer_screenshot(message, state, doc.file_id)
+        await message.answer(
+            "ℹ️ <b>Payment Screenshot Not Needed!</b>\n\n"
+            "Payments made via our dynamic UPI QR code are <b>automatically detected & credited</b> within seconds.\n\n"
+            "Please ensure you transferred the <b>exact decimal amount</b> shown on your QR code. Your balance will update automatically upon bank confirmation.",
+            parse_mode="HTML"
+        )
 
 
 @add_fund_router.callback_query(F.data.startswith("chk_dep:"))
