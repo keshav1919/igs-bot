@@ -8,6 +8,15 @@
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-header">
+      <span class="stat-label">Total Users</span>
+      <span class="stat-icon">👥</span>
+    </div>
+    <div class="stat-value">{{ total_users | default(0) }}</div>
+    <div class="stat-desc">Registered Telegram customers</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-header">
       <span class="stat-label">Total Revenue</span>
       <span class="stat-icon">💰</span>
     </div>

@@ -67,13 +67,11 @@ class TrueXGatewayService:
     @staticmethod
     async def generate_order_ref(db: AsyncSession) -> str:
         """
-        Generate collision-free order ID matching TG_PAY_MVNVLVM5_768 pattern.
+        Generate collision-free order ID as a BigInteger string (max 10 digits).
+        Range: 1,000,000,000 to 9,999,999,999.
         """
-        chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        for _ in range(10):
-            code = "".join(secrets.choice(chars) for _ in range(8))
-            num = secrets.randbelow(900) + 100
-            ref = f"TG_PAY_{code}_{num}"
+        for _ in range(20):
+            ref = str(secrets.randbelow(9000000000) + 1000000000)
             existing = (
                 await db.execute(
                     select(DepositRequest).where(DepositRequest.reference == ref)
@@ -81,7 +79,7 @@ class TrueXGatewayService:
             ).scalar_one_or_none()
             if not existing:
                 return ref
-        return f"TG_PAY_{secrets.token_hex(4).upper()}_{secrets.randbelow(900)+100}"
+        return str(int(datetime.now(timezone.utc).timestamp()) % 10000000000)
 
     @staticmethod
     async def calculate_unique_amount(db: AsyncSession, base_amount: float) -> float:

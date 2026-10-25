@@ -104,10 +104,7 @@ class WalletService:
         curr = currency or settings.DEFAULT_CURRENCY
 
         if not reference:
-            chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-            code = "".join(secrets.choice(chars) for _ in range(8))
-            num = secrets.randbelow(900) + 100
-            ref = f"TG_PAY_{code}_{num}"
+            ref = str(secrets.randbelow(9000000000) + 1000000000)
         else:
             ref = reference
 

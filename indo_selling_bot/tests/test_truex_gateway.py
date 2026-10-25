@@ -25,14 +25,11 @@ from indo_selling_bot.config import settings
 
 @pytest.mark.asyncio
 async def test_order_ref_format(seeded_db: AsyncSession):
-    """Verify order reference strictly follows TG_PAY_{8 chars}_{3 digits} pattern."""
+    """Verify order reference strictly follows BigInteger format (max 10 digits)."""
     ref = await TrueXGatewayService.generate_order_ref(seeded_db)
-    assert ref.startswith("TG_PAY_")
-    parts = ref.split("_")
-    assert len(parts) == 4  # ['TG', 'PAY', 'XXXXXXXX', 'XXX']
-    assert len(parts[2]) == 8
-    assert len(parts[3]) == 3
-    assert parts[3].isdigit()
+    assert ref.isdigit()
+    assert len(ref) <= 10
+    assert int(ref) >= 1000000000
 
 
 @pytest.mark.asyncio

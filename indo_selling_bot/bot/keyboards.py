@@ -214,6 +214,7 @@ def get_my_wallet_keyboard() -> InlineKeyboardMarkup:
 def get_admin_main_keyboard() -> InlineKeyboardMarkup:
     """Main administrative dashboard keyboard strictly matching Part 6 requirements."""
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Refresh Stats", callback_data="admin:main")],
         [InlineKeyboardButton(text="📥 Import TXT Stock", callback_data="admin:import_txt")],
         [InlineKeyboardButton(text="📊 View Stock Summary", callback_data="admin:view_stock")],
         [InlineKeyboardButton(text="💵 Price Management", callback_data="admin:manage_prices")],

@@ -196,7 +196,7 @@ async def test_minimum_deposit_validation(upgrade_db: AsyncSession):
     )
     assert dep30.amount == 30
     assert dep30.status == "PENDING_PAYMENT"
-    assert dep30.reference.startswith(("PAY-", "DEP-", "TG_PAY_"))
+    assert dep30.reference.isdigit() or dep30.reference.startswith(("PAY-", "DEP-", "TG_PAY_"))
 
     # Higher amount (₹500) MUST BE ACCEPTED
     dep500 = await WalletService.create_deposit_request(

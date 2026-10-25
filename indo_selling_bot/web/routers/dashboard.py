@@ -11,6 +11,7 @@ from indo_selling_bot.database import get_db
 from indo_selling_bot.models.order import Order, OrderStatus
 from indo_selling_bot.models.inventory import InventoryItem
 from indo_selling_bot.models.support import SupportTicket
+from indo_selling_bot.models.wallet import Customer
 from indo_selling_bot.web.dependencies import get_current_admin
 
 dashboard_router = APIRouter()
@@ -83,11 +84,16 @@ async def dashboard_view(
     open_tickets_stmt = select(func.count(SupportTicket.id)).where(SupportTicket.status == "OPEN")
     open_tickets_count = (await db.execute(open_tickets_stmt)).scalar() or 0
 
+    # 9. Total registered Telegram users / customers
+    users_stmt = select(func.count(Customer.id))
+    total_users = (await db.execute(users_stmt)).scalar() or 0
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
         context={
             "active_page": "dashboard",
+            "total_users": total_users,
             "total_revenue": total_revenue,
             "total_orders": total_orders,
             "verified_orders_count": verified_orders_count,

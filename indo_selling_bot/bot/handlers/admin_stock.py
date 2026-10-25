@@ -11,7 +11,8 @@ import logging
 import html
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
+from indo_selling_bot.models.wallet import Customer, Wallet, DepositRequest
 
 from aiogram import Router, F
 from aiogram.filters import Command
@@ -75,10 +76,65 @@ class AdminImportTxtState(StatesGroup):
 # ==========================================
 # Authorization Helpers
 # ==========================================
-def check_admin(user_id: int | None) -> bool:
-    if not user_id:
+def check_admin(user_id: int | None, username: str | None = None) -> bool:
+    if not user_id and not username:
         return False
-    return settings.is_admin(user_id)
+    return settings.is_admin(user_id, username)
+
+
+async def build_admin_dashboard_text(user_id: int, username: str | None = None) -> str:
+    """Build live KPI statistics and overview text for the administrator dashboard."""
+    async with AsyncSessionLocal() as db:
+        users_count = (await db.execute(select(func.count(Customer.id)))).scalar() or 0
+        total_balance = (await db.execute(select(func.sum(Wallet.balance)))).scalar() or 0.0
+
+        dep_row = (await db.execute(
+            select(func.count(DepositRequest.id), func.sum(DepositRequest.amount))
+            .where(DepositRequest.status.in_(["APPROVED", "SUCCESS"]))
+        )).one()
+        dep_count = dep_row[0] or 0
+        dep_amount = dep_row[1] or 0.0
+
+        pending_dep = (await db.execute(
+            select(func.count(DepositRequest.id))
+            .where(DepositRequest.status.in_(["PENDING", "PENDING_PAYMENT"]))
+        )).scalar() or 0
+
+        ord_row = (await db.execute(
+            select(func.count(Order.id), func.sum(Order.total_amount))
+            .where(Order.status == "COMPLETED")
+        )).one()
+        ord_count = ord_row[0] or 0
+        ord_amount = ord_row[1] or 0.0
+
+    stock_count = StockTxtService.get_total_stock_count()
+    sold_path = StockTxtService.get_sold_path()
+    sold_count = 0
+    if sold_path.exists():
+        try:
+            with open(sold_path, "r", encoding="utf-8", errors="ignore") as f:
+                sold_count = sum(1 for line in f if line.strip())
+        except Exception:
+            pass
+
+    admin_tag = f"@{username}" if username else f"ID: {user_id}"
+
+    return (
+        "🔐 <b>Administrator Control Panel</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Admin:</b> <code>{admin_tag}</code>\n"
+        f"🕒 <b>Timezone:</b> <code>{settings.BUSINESS_TIMEZONE}</code>\n\n"
+        "📊 <b>System Statistics & Overview:</b>\n"
+        f"👥 <b>Total Users:</b> <code>{users_count:,}</code>\n"
+        f"💰 <b>Total User Balance:</b> <code>₹{total_balance:,.2f}</code>\n"
+        f"📥 <b>Approved Deposits:</b> <code>{dep_count:,} (₹{dep_amount:,.2f})</code>\n"
+        f"⏳ <b>Pending Deposits:</b> <code>{pending_dep:,}</code>\n"
+        f"🛍️ <b>Completed Orders:</b> <code>{ord_count:,} (₹{ord_amount:,.2f})</code>\n"
+        f"📦 <b>Available Stock:</b> <code>{stock_count:,} accounts</code>\n"
+        f"✅ <b>Accounts Sold:</b> <code>{sold_count:,} accounts</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Select an administrative operation:"
+    )
 
 
 # ==========================================
@@ -91,25 +147,21 @@ async def handle_admin_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     user = message.from_user
     user_id = user.id if user else 0
+    username = user.username if user else None
 
-    if not check_admin(user_id):
+    if not check_admin(user_id, username):
         await message.answer(
-            "⛔ *Unauthorized Access*\n\n"
+            "⛔ <b>Unauthorized Access</b>\n\n"
             "This area is restricted to configured system administrators only.\n"
             "Your Telegram user ID is not registered with administrator privileges.",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
-    text = (
-        "🔐 *Administrator Control Panel*\n\n"
-        f"Authenticated as Admin ID: `{user_id}`\n"
-        f"Configured Business Timezone: `{settings.BUSINESS_TIMEZONE}`\n\n"
-        "Select an administrative operation:"
-    )
+    text = await build_admin_dashboard_text(user_id, username)
     await message.answer(
         text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=get_admin_main_keyboard()
     )
 
@@ -120,22 +172,18 @@ async def handle_admin_back_to_menu(query: CallbackQuery, state: FSMContext) -> 
     await state.clear()
     user = query.from_user
     user_id = user.id if user else 0
+    username = user.username if user else None
 
-    if not check_admin(user_id):
+    if not check_admin(user_id, username):
         await query.answer("⛔ Unauthorized: Administrator access required.", show_alert=True)
         return
 
     await query.answer()
-    text = (
-        "🔐 *Administrator Control Panel*\n\n"
-        f"Authenticated as Admin ID: `{user_id}`\n"
-        f"Configured Business Timezone: `{settings.BUSINESS_TIMEZONE}`\n\n"
-        "Select an administrative operation:"
-    )
+    text = await build_admin_dashboard_text(user_id, username)
     if query.message:
         await query.message.edit_text(
             text,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=get_admin_main_keyboard()
         )
 
