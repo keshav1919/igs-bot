@@ -785,24 +785,37 @@ async def handle_add_balance_cmd(message: Message):
         return
 
     try:
-        target_user_id = int(parts[1])
-        amount = float(parts[2])
+        clean_target = parts[1].strip("{}[]()<> \t")
+        target_user_id = int(clean_target)
+        clean_amt = parts[2].strip("{}[]()<> \t").replace("₹", "").replace("INR", "").replace(",", "")
+        amount = float(clean_amt)
     except ValueError:
         await message.answer("❌ Invalid user ID or amount.")
         return
 
+    if amount <= 0:
+        await message.answer("❌ Amount must be greater than ₹0.")
+        return
+
     async with AsyncSessionLocal() as db:
-        await WalletService.get_or_create_customer(db, target_user_id, f"user_{target_user_id}", "User")
-        w = await WalletService.get_or_create_wallet(db, target_user_id)
-        w.balance += amount
-        new_bal = w.balance
-        await db.commit()
+        success, msg, prev_bal, new_bal, ref = await WalletService.admin_add_fund(
+            db=db,
+            admin_id=message.from_user.id,
+            target_user_id=target_user_id,
+            amount=amount,
+            reason=f"Admin {message.from_user.id} /addbalance"
+        )
+
+    if not success:
+        await message.answer(f"❌ {msg}")
+        return
 
     await message.answer(
         f"✅ <b>Balance Added!</b>\n"
         f"👤 User ID: <code>{target_user_id}</code>\n"
         f"➕ Added: <b>₹{amount:.2f}</b>\n"
-        f"💰 New Balance: <b>₹{new_bal:.2f}</b>"
+        f"💰 New Balance: <b>₹{new_bal:.2f}</b>\n"
+        f"🔖 Ref: <code>{ref}</code>"
     )
 
     if target_user_id != message.from_user.id:

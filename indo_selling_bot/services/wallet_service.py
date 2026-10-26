@@ -336,3 +336,52 @@ class WalletService:
             .limit(limit)
         )
         return list((await db.execute(stmt)).scalars().all())
+
+    @staticmethod
+    async def admin_add_fund(
+        db: AsyncSession,
+        admin_id: int,
+        target_user_id: int,
+        amount: float,
+        reason: str | None = None
+    ) -> tuple[bool, str, float, float, str]:
+        """
+        Manually add funds to any customer's wallet by an administrator.
+        - Ensures user customer & wallet record exists (registers them if new)
+        - Atomically increases wallet balance
+        - Inserts an immutable transaction record (WalletTransaction)
+        - Writes an AuditLog record
+        Returns: (success: bool, message: str, prev_balance: float, new_balance: float, reference: str)
+        """
+        if amount <= 0:
+            return False, "Amount must be greater than ₹0.", 0.0, 0.0, ""
+
+        wallet = await WalletService.get_or_create_wallet(db, target_user_id)
+        prev_balance = float(wallet.balance)
+        new_balance = prev_balance + amount
+        wallet.balance = new_balance
+        wallet.updated_at = datetime.now(timezone.utc)
+
+        ref = f"ADMIN-FUND-{secrets.randbelow(900000) + 100000}"
+        tx = WalletTransaction(
+            wallet_id=wallet.id,
+            telegram_user_id=target_user_id,
+            tx_type="ADMIN_CREDIT",
+            amount=amount,
+            balance_after=new_balance,
+            reference=ref,
+            admin_id=admin_id,
+            description=reason or f"Admin {admin_id} credited ₹{amount:,.2f}",
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(tx)
+
+        audit = AuditLog(
+            action="ADMIN_ADD_FUND",
+            performed_by=f"TELEGRAM_ADMIN:{admin_id}",
+            details=f"Admin {admin_id} credited ₹{amount:,.2f} to user {target_user_id}. Ref: {ref}"
+        )
+        db.add(audit)
+
+        await db.commit()
+        return True, f"Successfully credited ₹{amount:,.2f} to user {target_user_id}.", prev_balance, new_balance, ref

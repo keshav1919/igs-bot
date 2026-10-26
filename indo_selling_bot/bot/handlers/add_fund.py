@@ -26,9 +26,9 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from indo_selling_bot.database import AsyncSessionLocal
-from indo_selling_bot.models.wallet import DepositRequest
+from indo_selling_bot.models.wallet import Customer, DepositRequest
 from indo_selling_bot.services.wallet_service import WalletService
 from indo_selling_bot.services.payment_setting_service import PaymentSettingService
 from indo_selling_bot.services.truex_service import TrueXGatewayService, polling_manager
@@ -120,15 +120,165 @@ async def _send_add_fund_info(target: Message | CallbackQuery, user_id: int, use
 
 
 @add_fund_router.message(F.text == "💰 Add Fund")
-@add_fund_router.message(Command("addfund"))
-@add_fund_router.message(Command("fund"))
-async def handle_add_fund_menu(message: Message, state: FSMContext) -> None:
-    """Entry point for customer adding funds."""
+async def handle_add_fund_button(message: Message, state: FSMContext) -> None:
+    """Entry point when customer clicks '💰 Add Fund' menu button."""
     await state.clear()
     user = message.from_user
     user_id = user.id if user else 0
     username = user.username if user else None
     await _send_add_fund_info(message, user_id, username)
+
+
+@add_fund_router.message(Command("fund"))
+@add_fund_router.message(Command("addfund"))
+async def handle_fund_command(message: Message, state: FSMContext) -> None:
+    """
+    Handle /fund and /addfund commands.
+    - Usage: /fund <userid> <amount> (Admin only)
+    - If called with arguments by admin, instantly credits target customer's wallet,
+      records ledger transaction & audit log, and notifies both parties.
+    - If called with arguments by non-admin, rejects access with strict authorization error.
+    - If called without arguments:
+        * Admin: shows admin usage syntax and quick personal deposit option.
+        * Customer: opens regular deposit payment info screen.
+    """
+    await state.clear()
+    user = message.from_user
+    user_id = user.id if user else 0
+    username = user.username if user else None
+    is_admin = _is_admin(user_id, username)
+
+    raw_text = message.text or ""
+    parts = raw_text.split()
+    args = parts[1:]
+
+    # 1. Admin /fund <userid> <amount> command flow
+    if args:
+        if not is_admin:
+            await message.answer(
+                "⛔ <b>Unauthorized:</b> Only administrators can add funds to user accounts.",
+                parse_mode="HTML"
+            )
+            return
+
+        if len(args) < 2:
+            usage_text = (
+                "⚠️ <b>Invalid Command Syntax</b>\n\n"
+                "<b>Usage:</b> <code>/fund &lt;userid&gt; &lt;amount&gt;</code>\n\n"
+                "<b>Examples:</b>\n"
+                f"• <code>/fund {user_id} 50</code>\n"
+                "• <code>/fund @username 100</code>"
+            )
+            await message.answer(usage_text, parse_mode="HTML")
+            return
+
+        target_raw = args[0].strip("{}[]()<> \t")
+        target_user_id: int | None = None
+
+        if target_raw.isdigit() or (target_raw.startswith("-") and target_raw[1:].isdigit()):
+            target_user_id = int(target_raw)
+        else:
+            clean_uname = target_raw.lstrip("@").lower()
+            async with AsyncSessionLocal() as db:
+                stmt = select(Customer).where(func.lower(Customer.username) == clean_uname)
+                cust = (await db.execute(stmt)).scalar_one_or_none()
+                if cust:
+                    target_user_id = cust.telegram_id
+                else:
+                    await message.answer(
+                        f"❌ <b>User Not Found:</b> Could not find user <code>@{html.escape(clean_uname)}</code> in database.\n"
+                        f"Please provide their numeric Telegram User ID instead:\n"
+                        f"<code>/fund &lt;userid&gt; &lt;amount&gt;</code>",
+                        parse_mode="HTML"
+                    )
+                    return
+
+        clean_amount = (
+            args[1]
+            .strip("{}[]()<> \t")
+            .replace("₹", "")
+            .replace("INR", "")
+            .replace("inr", "")
+            .replace("rs", "")
+            .replace("Rs", "")
+            .replace(",", "")
+            .strip()
+        )
+        try:
+            amount = float(clean_amount)
+        except ValueError:
+            await message.answer(
+                "❌ <b>Invalid Amount:</b> Please enter a valid number.\n"
+                f"Example: <code>/fund {target_user_id} 50</code>",
+                parse_mode="HTML"
+            )
+            return
+
+        if amount <= 0:
+            await message.answer(
+                "❌ <b>Invalid Amount:</b> Amount must be greater than ₹0.",
+                parse_mode="HTML"
+            )
+            return
+
+        async with AsyncSessionLocal() as db:
+            success, msg, prev_bal, new_bal, ref = await WalletService.admin_add_fund(
+                db=db,
+                admin_id=user_id,
+                target_user_id=target_user_id,
+                amount=amount,
+                reason=f"Admin {user_id} manual fund add"
+            )
+
+        if not success:
+            await message.answer(f"❌ <b>Error:</b> {html.escape(msg)}", parse_mode="HTML")
+            return
+
+        admin_reply = (
+            "✅ <b>Funds Added Successfully!</b>\n\n"
+            f"👤 <b>Customer ID:</b> <code>{target_user_id}</code>\n"
+            f"➕ <b>Amount Credited:</b> <b>₹{amount:,.2f}</b>\n"
+            f"💰 <b>Previous Balance:</b> <b>₹{prev_bal:,.2f}</b>\n"
+            f"💳 <b>New Wallet Balance:</b> <b>₹{new_bal:,.2f}</b>\n"
+            f"🔖 <b>Transaction Ref:</b> <code>{ref}</code>\n"
+            f"👮 <b>Processed by Admin:</b> <code>{user_id}</code>"
+        )
+        await message.answer(admin_reply, parse_mode="HTML")
+
+        # Notify customer
+        if message.bot and target_user_id != user_id:
+            cust_notification = (
+                "💳 <b>Wallet Credited!</b>\n\n"
+                f"Your wallet has been credited with <b>₹{amount:,.2f}</b> by the administrator.\n\n"
+                f"💰 <b>Current Balance:</b> <b>₹{new_bal:,.2f}</b>\n"
+                f"🔖 <b>Ref:</b> <code>{ref}</code>\n\n"
+                "You can now use your balance to purchase accounts!"
+            )
+            try:
+                await message.bot.send_message(
+                    chat_id=target_user_id,
+                    text=cust_notification,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.info(f"Could not deliver direct notification to user {target_user_id}: {e}")
+        return
+
+    # 2. No arguments provided flow
+    if is_admin:
+        admin_info = (
+            "👑 <b>Admin Fund Command Usage:</b>\n"
+            "To add funds to any user's account:\n"
+            "<code>/fund &lt;userid&gt; &lt;amount&gt;</code>\n\n"
+            "<b>Examples:</b>\n"
+            f"• <code>/fund {user_id} 50</code>\n"
+            "• <code>/fund @username 100</code>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "<i>To top up your personal wallet via UPI QR, click below:</i>"
+        )
+        await message.answer(admin_info, parse_mode="HTML", reply_markup=get_add_fund_keyboard())
+    else:
+        await _send_add_fund_info(message, user_id, username)
 
 
 @add_fund_router.callback_query(F.data.in_({"goto_add_fund", "menu_add_fund", "add_fund", "funds_help"}))

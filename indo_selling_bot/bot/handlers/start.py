@@ -95,6 +95,12 @@ async def handle_help(message: Message) -> None:
     if is_admin:
         help_lines.extend([
             "",
+            "👑 *Administrator Commands:*",
+            "• `/fund <userid> <amount>` - Add funds to any user's account",
+            "• `/setprice <amount>` - Set global Indo price across all days",
+            "• `/prices` - View live category pricing summary",
+            "• `/admin` - Open administrator control panel",
+            "",
             "🔐 *Administrator Stock Import Formats:*",
             "Command: `/admin` or `/import_stock`",
             "",
