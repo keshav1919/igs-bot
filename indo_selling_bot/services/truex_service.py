@@ -33,6 +33,29 @@ from indo_selling_bot.models.audit import AuditLog
 
 logger = logging.getLogger("truex_gateway")
 
+_truex_http_client: Optional[httpx.AsyncClient] = None
+
+def get_truex_client() -> httpx.AsyncClient:
+    global _truex_http_client
+    if _truex_http_client is None or _truex_http_client.is_closed:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+        }
+        _truex_http_client = httpx.AsyncClient(
+            headers=headers,
+            timeout=15.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=60.0)
+        )
+    return _truex_http_client
+
+async def close_truex_client() -> None:
+    global _truex_http_client
+    if _truex_http_client and not _truex_http_client.is_closed:
+        await _truex_http_client.aclose()
+        _truex_http_client = None
+
 
 def format_success_caption(amount: float, order_id: str, paid_at_dt: Optional[datetime] = None) -> str:
     """
@@ -113,6 +136,7 @@ class TrueXGatewayService:
     async def create_order(amount: float, order_ref: str, description: str = "") -> dict:
         """
         Call TrueXGateway /api/create-order.php to initiate dynamic UPI payment.
+        Uses persistent client to preserve PHP session cookies and bypass anti-bot challenges.
         """
         url = f"{settings.TRUEXGATEWAY_BASE_URL.rstrip('/')}/create-order.php"
         headers = {
@@ -127,17 +151,46 @@ class TrueXGatewayService:
             "description": description or f"Wallet Topup {order_ref}"
         }
         logger.info(f"Creating TrueXGateway order: ref={order_ref}, amount={amount:.2f}")
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            if resp.status_code != 200:
-                logger.error(f"TrueXGateway create-order failed HTTP {resp.status_code}: {resp.text}")
-                raise RuntimeError(f"TrueXGateway HTTP error {resp.status_code}: {resp.text}")
-            data = resp.json()
-            if not data.get("success"):
-                err_msg = data.get("message") or "Failed to create TrueXGateway order"
-                logger.error(f"TrueXGateway create-order error: {err_msg}")
-                raise ValueError(err_msg)
-            return data
+
+        client = get_truex_client()
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    content_type = resp.headers.get("content-type", "")
+                    if "application/json" in content_type:
+                        break
+                    elif "<!DOCTYPE" in resp.text or "Bot Verification" in resp.text:
+                        logger.warning(f"TrueXGateway LiteSpeed verification challenge on attempt {attempt+1}")
+                        if attempt == 0:
+                            await asyncio.sleep(0.5)
+                            continue
+            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                logger.warning(f"TrueXGateway timeout on attempt {attempt+1}: {e}")
+                if attempt == 0:
+                    await asyncio.sleep(0.5)
+                    continue
+                raise
+
+        if not resp:
+            raise RuntimeError("TrueXGateway request failed.")
+
+        if resp.status_code != 200:
+            logger.error(f"TrueXGateway create-order failed HTTP {resp.status_code}: {resp.text}")
+            raise RuntimeError(f"TrueXGateway HTTP error {resp.status_code}: {resp.text}")
+
+        content_type = resp.headers.get("content-type", "")
+        if "text/html" in content_type or "<!DOCTYPE" in resp.text or "Bot Verification" in resp.text:
+            logger.error("TrueXGateway returned HTML anti-bot page instead of JSON")
+            raise RuntimeError("Gateway server anti-bot verification challenged.")
+
+        data = resp.json()
+        if not data.get("success"):
+            err_msg = data.get("message") or "Failed to create TrueXGateway order"
+            logger.error(f"TrueXGateway create-order error: {err_msg}")
+            raise ValueError(err_msg)
+        return data
 
     @staticmethod
     def generate_qr_bytes(upi_intent: str, padding_percent: float = 0.15) -> bytes:
@@ -219,13 +272,24 @@ class TrueXGatewayService:
         Poll /api/payment-status.php to check real-time bank verification status.
         """
         url = f"{settings.TRUEXGATEWAY_BASE_URL.rstrip('/')}/payment-status.php?orderId={txg_order_id}&public=1"
-        headers = {"X-API-Key": settings.TRUEXGATEWAY_API_KEY}
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        headers = {
+            "X-API-Key": settings.TRUEXGATEWAY_API_KEY,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*"
+        }
+        client = get_truex_client()
+        try:
             resp = await client.get(url, headers=headers)
             if resp.status_code != 200:
-                logger.warning(f"Payment status check HTTP {resp.status_code}: {resp.text}")
+                logger.warning(f"Payment status check HTTP {resp.status_code}: {resp.text[:100]}")
+                return {"success": False, "status": "unknown"}
+            content_type = resp.headers.get("content-type", "")
+            if "application/json" not in content_type:
                 return {"success": False, "status": "unknown"}
             return resp.json()
+        except Exception as e:
+            logger.warning(f"Payment status check exception for {txg_order_id}: {e}")
+            return {"success": False, "status": "unknown"}
 
     @staticmethod
     async def process_successful_payment(
