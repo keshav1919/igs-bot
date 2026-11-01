@@ -372,93 +372,136 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         unique_amount = await TrueXGatewayService.calculate_unique_amount(db, base_amount)
         order_ref = await TrueXGatewayService.generate_order_ref(db)
 
+    order_data = None
+    txg_order_id = ""
+    qr_bytes = None
+    gateway_success = False
+
     try:
         order_data = await TrueXGatewayService.create_order(
             amount=unique_amount,
             order_ref=order_ref,
             description=f"Indo Topup {order_ref}"
         )
+        if order_data and isinstance(order_data, dict):
+            txg_order_id = order_data.get("orderId") or ""
+            qr_url = order_data.get("qrUrl")
+            upi_intent = order_data.get("upiIntent") or order_data.get("appUpiIntent")
+
+            qr_bytes = await TrueXGatewayService.fetch_qr_image_bytes(
+                txg_order_id=txg_order_id,
+                qr_url_fallback=qr_url,
+                upi_intent=upi_intent
+            )
+            if qr_bytes:
+                gateway_success = True
     except Exception as err:
-        logger.error(f"TrueXGateway create-order failed: {err}")
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-        await message.answer(f"❌ Failed to generate payment order: {err}\nPlease try again.")
-        return
+        logger.warning(f"TrueXGateway order generation failed ({err}). Falling back to self-generated UPI QR.")
+        gateway_success = False
 
-    txg_order_id = order_data.get("orderId") or ""
-    qr_url = order_data.get("qrUrl")
-    upi_intent = order_data.get("upiIntent") or order_data.get("appUpiIntent")
-    checkout_url = order_data.get("checkoutUrl")
-
-    try:
-        qr_bytes = await TrueXGatewayService.fetch_qr_image_bytes(
-            txg_order_id=txg_order_id,
-            qr_url_fallback=qr_url,
-            upi_intent=upi_intent
-        )
-    except Exception as qr_err:
-        logger.error(f"Failed to fetch QR image bytes: {qr_err}")
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-        await message.answer("❌ Could not retrieve QR code image from gateway. Please try again.")
-        return
-
-    # Create DepositRequest in DB
-    async with AsyncSessionLocal() as db:
-        deposit = await WalletService.create_deposit_request(
-            db=db,
-            telegram_user_id=user.id,
-            amount=unique_amount,
-            reference=order_ref,
-            txg_order_id=txg_order_id,
-            currency="₹",
-            username=user.username,
-            first_name=user.first_name,
-            initial_status="PENDING_PAYMENT"
-        )
-        await db.commit()
-
-    qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
-
-    caption = (
-        f"💰 <b>Amount to Pay:</b> <code>₹{base_amount:.2f}</code>\n\n"
-        "⏳ <b>Status:</b> PENDING PAYMENT\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "1. Scan the QR code\n"
-        "2. Use Indo and injoy"
-    )
-
-    kb = get_truex_payment_keyboard(txg_order_id)
     try:
         await status_msg.delete()
     except Exception:
         pass
 
-    qr_msg = await message.answer_photo(photo=qr_file, caption=caption, parse_mode="HTML", reply_markup=kb)
+    if gateway_success and order_data and qr_bytes:
+        # Gateway succeeded: regular QR with inline buttons and auto-detection like before
+        async with AsyncSessionLocal() as db:
+            deposit = await WalletService.create_deposit_request(
+                db=db,
+                telegram_user_id=user.id,
+                amount=unique_amount,
+                reference=order_ref,
+                txg_order_id=txg_order_id,
+                currency="₹",
+                username=user.username,
+                first_name=user.first_name,
+                initial_status="PENDING_PAYMENT"
+            )
+            await db.commit()
 
-    # Save message_id and chat_id in database for in-place success editing
-    async with AsyncSessionLocal() as db:
-        stmt = (
-            update(DepositRequest)
-            .where(DepositRequest.reference == order_ref)
-            .values(message_id=qr_msg.message_id, chat_id=qr_msg.chat.id)
+        qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
+        caption = (
+            f"💰 <b>Amount to Pay:</b> <code>₹{base_amount:.2f}</code>\n\n"
+            "⏳ <b>Status:</b> PENDING PAYMENT\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1. Scan the QR code\n"
+            "2. Use Indo and injoy"
         )
-        await db.execute(stmt)
-        await db.commit()
+        kb = get_truex_payment_keyboard(txg_order_id)
+        qr_msg = await message.answer_photo(photo=qr_file, caption=caption, parse_mode="HTML", reply_markup=kb)
 
-    await state.clear()
+        async with AsyncSessionLocal() as db:
+            stmt = (
+                update(DepositRequest)
+                .where(DepositRequest.reference == order_ref)
+                .values(message_id=qr_msg.message_id, chat_id=qr_msg.chat.id)
+            )
+            await db.execute(stmt)
+            await db.commit()
 
-    # Launch background polling task for auto-detection
-    if message.bot:
-        await polling_manager.start_polling(
-            bot=message.bot,
-            txg_order_id=txg_order_id,
-            order_ref=order_ref
+        await state.clear()
+
+        if message.bot:
+            await polling_manager.start_polling(
+                bot=message.bot,
+                txg_order_id=txg_order_id,
+                order_ref=order_ref
+            )
+    else:
+        # API Problem / Gateway failed: Self-generate QR from configured UPI, NO inline buttons, prompt for payment screenshot
+        async with AsyncSessionLocal() as db:
+            payment_cfg = await PaymentSettingService.get_settings(db)
+        upi_id = payment_cfg.get("upi_id") or settings.PAYMENT_UPI_ID or settings.DEFAULT_UPI_ID
+        payee_name = payment_cfg.get("payee_name") or settings.DEFAULT_UPI_NAME
+
+        qr_bytes = generate_upi_qr_bytes(
+            upi_id=upi_id,
+            payee_name=payee_name,
+            amount=base_amount,
+            ref_id=order_ref
         )
+
+        async with AsyncSessionLocal() as db:
+            deposit = await WalletService.create_deposit_request(
+                db=db,
+                telegram_user_id=user.id,
+                amount=base_amount,
+                reference=order_ref,
+                txg_order_id=None,
+                currency="₹",
+                username=user.username,
+                first_name=user.first_name,
+                initial_status="PENDING_PAYMENT"
+            )
+            await db.commit()
+
+        qr_file = BufferedInputFile(qr_bytes, filename=f"qr_{order_ref}.png")
+        caption = (
+            f"💰 <b>Amount to Pay:</b> <code>₹{base_amount:.2f}</code>\n"
+            f"🆔 <b>Order ID:</b> <code>{order_ref}</code>\n"
+            f"🏦 <b>UPI ID:</b> <code>{html.escape(upi_id)}</code>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1. Scan the QR code or pay to the UPI ID.\n"
+            f"2. Pay the exact amount (<b>₹{base_amount:.2f}</b>).\n"
+            "3. 📸 <b>Send payment screenshot</b> here in this chat.\n\n"
+            "⏳ Once submitted, an admin will review and approve or reject your payment."
+        )
+
+        # NO inline buttons on self-generated QR as requested
+        qr_msg = await message.answer_photo(photo=qr_file, caption=caption, parse_mode="HTML", reply_markup=None)
+
+        async with AsyncSessionLocal() as db:
+            stmt = (
+                update(DepositRequest)
+                .where(DepositRequest.reference == order_ref)
+                .values(message_id=qr_msg.message_id, chat_id=qr_msg.chat.id)
+            )
+            await db.execute(stmt)
+            await db.commit()
+
+        await state.set_state(AddFundState.waiting_for_screenshot)
+        await state.update_data(deposit_ref=order_ref, amount=base_amount)
 
 
 @add_fund_router.callback_query(F.data.startswith("txg_chk:"))
@@ -652,29 +695,60 @@ async def _process_customer_screenshot(message: Message, state: FSMContext, file
 @add_fund_router.message(AddFundState.waiting_for_amount, F.photo)
 @add_fund_router.message(F.photo)
 async def handle_payment_screenshot_photo(message: Message, state: FSMContext) -> None:
-    """Inform customer that manual screenshot upload is not needed; payments auto-detect."""
+    """Process payment screenshot photo for pending review and admin verification."""
     user = message.from_user
-    if not user:
+    if not user or not message.photo:
         return
-    await message.answer(
-        "ℹ️ <b>Payment Screenshot Not Needed!</b>\n\n"
-        "Payments made via our dynamic UPI QR code are <b>automatically detected & credited</b> within seconds.\n\n"
-        "Please ensure you transferred the <b>exact decimal amount</b> shown on your QR code. Your balance will update automatically upon bank confirmation.",
-        parse_mode="HTML"
-    )
+
+    file_id = message.photo[-1].file_id
+    data = await state.get_data()
+    deposit_ref = data.get("deposit_ref")
+
+    async with AsyncSessionLocal() as db:
+        if not deposit_ref:
+            pending = await WalletService.get_latest_pending_deposit(db, user.id)
+            if pending:
+                deposit_ref = pending.reference
+
+    if deposit_ref:
+        await _process_customer_screenshot(message, state, file_id)
+    else:
+        await message.answer(
+            "⚠️ No active pending payment request found.\n"
+            "Please click <b>💰 Add Fund</b> to create a payment request before sending a payment screenshot.",
+            parse_mode="HTML"
+        )
 
 
 @add_fund_router.message(AddFundState.waiting_for_screenshot, F.document)
 @add_fund_router.message(AddFundState.waiting_for_amount, F.document)
 @add_fund_router.message(F.document)
 async def handle_payment_screenshot_document(message: Message, state: FSMContext) -> None:
-    """Inform customer that manual screenshot upload is not needed."""
+    """Process payment screenshot image document for admin verification."""
     doc = message.document
-    if doc and doc.mime_type and doc.mime_type.startswith("image/"):
+    if not doc or not doc.mime_type or not doc.mime_type.startswith("image/"):
+        return
+
+    user = message.from_user
+    if not user:
+        return
+
+    file_id = doc.file_id
+    data = await state.get_data()
+    deposit_ref = data.get("deposit_ref")
+
+    async with AsyncSessionLocal() as db:
+        if not deposit_ref:
+            pending = await WalletService.get_latest_pending_deposit(db, user.id)
+            if pending:
+                deposit_ref = pending.reference
+
+    if deposit_ref:
+        await _process_customer_screenshot(message, state, file_id)
+    else:
         await message.answer(
-            "ℹ️ <b>Payment Screenshot Not Needed!</b>\n\n"
-            "Payments made via our dynamic UPI QR code are <b>automatically detected & credited</b> within seconds.\n\n"
-            "Please ensure you transferred the <b>exact decimal amount</b> shown on your QR code. Your balance will update automatically upon bank confirmation.",
+            "⚠️ No active pending payment request found.\n"
+            "Please click <b>💰 Add Fund</b> to create a payment request before sending a payment screenshot.",
             parse_mode="HTML"
         )
 
