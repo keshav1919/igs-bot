@@ -366,7 +366,7 @@ async def process_deposit_amount(message: Message, state: FSMContext) -> None:
         await message.answer(f"⚠️ Maximum single deposit amount is ₹{settings.MAX_DEPOSIT_AMOUNT:,.2f}. Please enter a smaller amount.")
         return
 
-    status_msg = await message.answer("Please wait...")
+    status_msg = await message.answer("⏳ Generating payment QR code... Please wait...")
 
     async with AsyncSessionLocal() as db:
         unique_amount = await TrueXGatewayService.calculate_unique_amount(db, base_amount)
@@ -613,6 +613,17 @@ async def _process_customer_screenshot(message: Message, state: FSMContext, file
         dep = await WalletService.get_deposit_by_ref(db, deposit_ref)
         if not dep:
             await message.answer("⚠️ Payment request not found.")
+            return
+
+        # TrueX Dynamic QR orders are automatically detected by gateway.
+        # Do not send screenshots to admin for dynamic gateway orders!
+        if dep.txg_order_id:
+            await message.answer(
+                "ℹ️ <b>Payment Screenshot Not Needed!</b>\n\n"
+                "Payments made via our dynamic UPI QR code are <b>automatically detected & credited</b> within seconds.\n\n"
+                f"Please ensure you transferred the <b>exact decimal amount</b> (<code>₹{dep.amount:.2f}</code>) shown on your QR code. Your balance will update automatically upon bank confirmation.",
+                parse_mode="HTML"
+            )
             return
 
         # Screenshot will go to review once only

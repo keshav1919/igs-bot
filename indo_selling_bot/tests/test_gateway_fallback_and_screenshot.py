@@ -318,3 +318,45 @@ async def test_admin_reject_payment():
     assert query.bot.send_message.called
     sent_text = query.bot.send_message.call_args.kwargs["text"]
     assert "Rejected" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_customer_screenshot_not_needed_for_gateway_orders():
+    """
+    When customer pays via dynamic TrueX Gateway QR (txg_order_id present):
+    Payment auto-detects, so screenshots DO NOT go to admin approval.
+    Bot responds that screenshot is not needed.
+    """
+    cust_id = random.randint(100000000, 999999999)
+    deposit_ref = f"DEP-TXG-{uuid.uuid4().hex[:8].upper()}"
+
+    # 1. Create a dynamic gateway deposit (with txg_order_id)
+    async with AsyncSessionLocal() as db:
+        await WalletService.get_or_create_customer(db, cust_id, "testuser_txg")
+        dep = await WalletService.create_deposit_request(
+            db=db,
+            telegram_user_id=cust_id,
+            amount=50.25,
+            reference=deposit_ref,
+            txg_order_id="TXG_AUTO_DETECT_12345",
+            initial_status="PENDING_PAYMENT"
+        )
+        await db.commit()
+
+    # 2. Customer sends photo
+    msg = _make_msg(cust_id)
+    photo_mock = MagicMock()
+    photo_mock.file_id = f"AgACAgUAAxkBAAI_txg_{uuid.uuid4().hex[:6]}"
+    msg.photo = [photo_mock]
+
+    state = _make_fsm(cust_id)
+    await handle_payment_screenshot_photo(msg, state)
+
+    # Bot responds that screenshot is not needed
+    assert msg.answer.called
+    response_text = msg.answer.call_args[0][0]
+    assert "Payment Screenshot Not Needed!" in response_text
+    assert "automatically detected" in response_text
+
+    # Verify admin was NOT alerted
+    assert not msg.bot.send_photo.called
