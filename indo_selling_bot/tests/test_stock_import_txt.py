@@ -543,7 +543,8 @@ async def test_manual_stock_paste_handler(import_db: AsyncSession, monkeypatch):
             assert current_state == AdminAddStockState.waiting_for_manual_text.state
 
             # 2. Admin pastes account text
-            pasted_text = "( testacc01@metamail.store:pass123:testuser01:18 Oct 2026, 05:00:00 IST )"
+            recent_ist = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%d %b %Y, %H:%M:%S IST")
+            pasted_text = f"( testacc01@metamail.store:pass123:testuser01:{recent_ist} )"
             mock_paste_msg = MagicMock(spec=Message)
             mock_paste_msg.from_user = User(id=admin_id, is_bot=False, first_name="Admin")
             mock_paste_msg.text = pasted_text
@@ -607,7 +608,8 @@ async def test_direct_text_paste_in_import_txt_flow(import_db: AsyncSession):
             state = FSMContext(storage=storage, key=StorageKey(bot_id=1, chat_id=admin_id, user_id=admin_id))
             await state.set_state(AdminImportTxtState.waiting_for_file)
 
-            pasted_line = "direct01@metamail.store:secret:directuser:17 Oct 2026, 12:00:00 IST"
+            recent_ist = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%d %b %Y, %H:%M:%S IST")
+            pasted_line = f"direct01@metamail.store:secret:directuser:{recent_ist}"
             mock_msg = MagicMock(spec=Message)
             mock_msg.from_user = User(id=admin_id, is_bot=False, first_name="Admin")
             mock_msg.text = pasted_line

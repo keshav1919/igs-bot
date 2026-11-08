@@ -5,6 +5,10 @@ deposit actions, and administrator management keyboards.
 """
 from typing import Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+try:
+    from aiogram.types import CopyTextButton
+except ImportError:
+    CopyTextButton = None
 from indo_selling_bot.config import settings
 from indo_selling_bot.models.category import Category
 from indo_selling_bot.models.inventory import InventoryItem
@@ -48,11 +52,15 @@ def get_start_welcome_keyboard() -> InlineKeyboardMarkup:
     Main welcome keyboard on /start:
     - 🛒 Buy Indo (green/success)
     - 📩 Outlook (blue/primary)
+    - 🎁 Free Indo IGS (green/success)
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🛒 Buy Indo", callback_data="back_to_buy_indo", style="success"),
             InlineKeyboardButton(text="📩 Outlook", callback_data="outlook_home", style="primary"),
+        ],
+        [
+            InlineKeyboardButton(text="🎁 Free Indo IGS", callback_data="free_indo_igs_menu", style="success"),
         ]
     ])
 
@@ -223,6 +231,7 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="⚠️ Pending Fulfilment", callback_data="admin:pending_fulfillment")],
         [InlineKeyboardButton(text="📜 Import & Transaction History", callback_data="admin:import_history")],
         [InlineKeyboardButton(text="📩 Outlook Admin Panel", callback_data="admin_outlook_panel")],
+        [InlineKeyboardButton(text="🎁 Free Indo IGS", callback_data="admin_free_indo")],
         [InlineKeyboardButton(text="🔙 Back to Main Menu", callback_data="admin:back_main")]
     ])
 
@@ -739,4 +748,188 @@ def get_outlook_delete_confirm_keyboard(account_id: int) -> InlineKeyboardMarkup
             )
         ]
     ])
+
+
+# =========================================================================
+# Free Indo IGS Keyboards
+# =========================================================================
+
+def get_free_indo_main_keyboard() -> InlineKeyboardMarkup:
+    """
+    Main Free Indo IGS section keyboard:
+    - 🎥 Watch Tutorial
+    - 📋 How It Works
+    - 🚀 Submit Proxy
+    - 📊 My Progress
+    - 🔙 Back to Main Menu
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎥 Watch Tutorial", callback_data="free_indo:tutorial", style="primary")],
+        [InlineKeyboardButton(text="📋 How It Works", callback_data="free_indo:how_it_works", style="primary")],
+        [InlineKeyboardButton(text="🚀 Submit Proxy", callback_data="free_indo:submit", style="success")],
+        [InlineKeyboardButton(text="📊 My Progress", callback_data="free_indo:progress", style="primary")],
+        [InlineKeyboardButton(text="🔙 Back to Main Menu", callback_data="back_to_main", style="danger")]
+    ])
+
+
+def get_free_indo_back_keyboard() -> InlineKeyboardMarkup:
+    """Back button returning to Free Indo IGS main menu."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="« Back to Free Indo IGS", callback_data="free_indo_igs_menu", style="danger")]
+    ])
+
+
+def get_free_indo_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Cancel button while in proxy submission state."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Cancel Submission", callback_data="free_indo_igs_menu", style="danger")]
+    ])
+
+
+def get_admin_free_indo_keyboard(enabled: bool = True) -> InlineKeyboardMarkup:
+    """Free Indo IGS administrative dashboard menu."""
+    status_badge = "🟢 ACTIVE" if enabled else "🔴 PAUSED"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"⚙️ Settings & Limits ({status_badge})", callback_data="admin_free_indo:settings")],
+        [InlineKeyboardButton(text="🎥 Tutorial Management", callback_data="admin_free_indo:tutorial")],
+        [InlineKeyboardButton(text="📋 Submission Logs", callback_data="admin_free_indo:submissions:ALL:0")],
+        [InlineKeyboardButton(text="🏆 Reward Management", callback_data="admin_free_indo:rewards")],
+        [InlineKeyboardButton(text="👥 User Management (Timeouts)", callback_data="admin_free_indo:timeouts")],
+        [InlineKeyboardButton(text="📦 Stored Proxies", callback_data="admin_free_indo:stored_proxies")],
+        [InlineKeyboardButton(text="« Back to Admin Dashboard", callback_data="admin:main", style="danger")]
+    ])
+
+
+def get_admin_free_indo_settings_keyboard(cfg) -> InlineKeyboardMarkup:
+    """Keyboard for configuring feature settings."""
+    toggle_text = "🔴 Disable Feature" if cfg.enabled else "🟢 Enable Feature"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=toggle_text, callback_data="admin_free_indo:toggle_enabled")],
+        [InlineKeyboardButton(text=f"🌐 Host: {cfg.proxy_host}", callback_data="admin_free_indo:set_host")],
+        [InlineKeyboardButton(text=f"🔌 Port: {cfg.proxy_port}", callback_data="admin_free_indo:set_port")],
+        [InlineKeyboardButton(text=f"⏱️ Timeout: {cfg.connection_timeout}s", callback_data="admin_free_indo:set_timeout")],
+        [InlineKeyboardButton(text=f"🚫 Max Fails: {cfg.max_failed_attempts}", callback_data="admin_free_indo:set_max_fails")],
+        [InlineKeyboardButton(text=f"⏳ Restriction: {cfg.timeout_minutes}m", callback_data="admin_free_indo:set_timeout_mins")],
+        [InlineKeyboardButton(text="« Back to Free Indo Admin", callback_data="admin_free_indo", style="danger")]
+    ])
+
+
+def get_admin_free_indo_tutorial_keyboard(has_video: bool = False) -> InlineKeyboardMarkup:
+    """Tutorial video management keyboard."""
+    buttons = [
+        [InlineKeyboardButton(text="📤 Upload / Replace Tutorial Video", callback_data="admin_free_indo:upload_tutorial")]
+    ]
+    if has_video:
+        buttons.append([InlineKeyboardButton(text="🗑️ Remove Tutorial Video", callback_data="admin_free_indo:remove_tutorial", style="danger")])
+    buttons.append([InlineKeyboardButton(text="« Back to Free Indo Admin", callback_data="admin_free_indo", style="danger")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_admin_stored_proxies_menu_keyboard() -> InlineKeyboardMarkup:
+    """
+    Administrative menu for retrieving stored verified proxies:
+    - Get 1 Proxy
+    - Get 5 Proxies
+    - Get 10 Proxies
+    - Get 25 Proxies
+    - Get 50 Proxies
+    - Get Custom Amount
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Get 1 Proxy", callback_data="admin_free_indo:get_p:1"),
+            InlineKeyboardButton(text="Get 5 Proxies", callback_data="admin_free_indo:get_p:5"),
+        ],
+        [
+            InlineKeyboardButton(text="Get 10 Proxies", callback_data="admin_free_indo:get_p:10"),
+            InlineKeyboardButton(text="Get 25 Proxies", callback_data="admin_free_indo:get_p:25"),
+        ],
+        [
+            InlineKeyboardButton(text="Get 50 Proxies", callback_data="admin_free_indo:get_p:50"),
+            InlineKeyboardButton(text="Get Custom Amount", callback_data="admin_free_indo:get_p:custom"),
+        ],
+        [
+            InlineKeyboardButton(text="« Back to Free Indo Admin", callback_data="admin_free_indo", style="danger")
+        ]
+    ])
+
+
+def get_admin_retrieved_proxies_keyboard(proxies: list[dict], all_proxies_text: str) -> InlineKeyboardMarkup:
+    """
+    Builds keyboard for retrieved proxies:
+    - [📋 Copy All Proxies] using copy_text
+    - Individual [📋 Copy Proxy N] for each proxy
+    - Fallback raw copy button
+    """
+    rows = []
+
+    # Copy All button
+    if CopyTextButton:
+        rows.append([
+            InlineKeyboardButton(
+                text="📋 Copy All Proxies",
+                copy_text=CopyTextButton(text=all_proxies_text),
+                style="success"
+            )
+        ])
+    else:
+        rows.append([
+            InlineKeyboardButton(
+                text="📋 Copy All Proxies",
+                callback_data="admin_free_indo:copy_fallback:all",
+                style="success"
+            )
+        ])
+
+    # Individual proxy buttons
+    for idx, p in enumerate(proxies, start=1):
+        formatted_str = p.get("formatted", "")
+        pid = p.get("id", idx)
+        if CopyTextButton:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"📋 Copy Proxy {idx}",
+                    copy_text=CopyTextButton(text=formatted_str)
+                )
+            ])
+        else:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"📋 Copy Proxy {idx}",
+                    callback_data=f"admin_free_indo:copy_fallback:{pid}"
+                )
+            ])
+
+    rows.append([
+        InlineKeyboardButton(text="« Back to Stored Proxies", callback_data="admin_free_indo:stored_proxies", style="danger")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_admin_pending_rewards_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for rewards and pending queue management."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Deliver / Retry Pending Rewards Now", callback_data="admin_free_indo:deliver_pending", style="success")],
+        [InlineKeyboardButton(text="📥 Add Stock via TXT", callback_data="admin:import_txt", style="primary")],
+        [InlineKeyboardButton(text="« Back to Free Indo Admin", callback_data="admin_free_indo", style="danger")]
+    ])
+
+
+def get_admin_timeout_users_keyboard(users: list[dict]) -> InlineKeyboardMarkup:
+    """Keyboard listing users currently under timeout with reset actions."""
+    rows = []
+    for u in users[:8]:
+        uid = u["telegram_user_id"]
+        mins = u["remaining_minutes"]
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🔓 Unban {uid} ({mins}m left)",
+                callback_data=f"admin_free_indo:unban:{uid}"
+            )
+        ])
+    rows.append([
+        InlineKeyboardButton(text="« Back to Free Indo Admin", callback_data="admin_free_indo", style="danger")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
 

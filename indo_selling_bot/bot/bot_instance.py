@@ -20,6 +20,8 @@ from indo_selling_bot.bot.handlers.catalog import catalog_router
 from indo_selling_bot.bot.handlers.order import order_router
 from indo_selling_bot.bot.handlers.my_orders import my_orders_router
 from indo_selling_bot.bot.handlers.support import support_router
+from indo_selling_bot.bot.handlers.free_indo import free_indo_router
+from indo_selling_bot.bot.handlers.admin_free_indo import admin_free_indo_router
 
 logger = logging.getLogger("bot")
 
@@ -34,6 +36,8 @@ def setup_bot_and_dispatcher() -> tuple[Bot | None, Dispatcher]:
     # Detach any existing parent bindings before including (prevents RuntimeError on restart)
     routers = [
         start_router,
+        free_indo_router,
+        admin_free_indo_router,
         outlook_router,
         buy_indo_router,
         total_stock_router,

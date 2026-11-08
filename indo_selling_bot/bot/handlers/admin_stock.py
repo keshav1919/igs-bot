@@ -1655,6 +1655,13 @@ async def handle_import_confirm(query: CallbackQuery) -> None:
             )
         return
 
+    # Trigger automatic delivery of any pending Free Indo IGS rewards
+    try:
+        from indo_selling_bot.services.free_indo_service import FreeIndoService
+        asyncio.create_task(FreeIndoService.deliver_pending_rewards(bot=query.bot))
+    except Exception:
+        pass
+
     success_text = (
         "🎉 <b>Stock Import Confirmed & Saved!</b>\n\n"
         f"📁 <b>Filename:</b> <code>{html.escape(preview.filename)}</code>\n"

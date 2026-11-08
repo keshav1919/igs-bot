@@ -15,6 +15,13 @@ from indo_selling_bot.models.import_history import StockImportHistory
 from indo_selling_bot.models.pricing import CategoryPrice, PriceChangeLog
 from indo_selling_bot.models.free_claim import FreeClaim
 from indo_selling_bot.models.outlook_account import OutlookAccount
+from indo_selling_bot.models.free_indo_igs import (
+    FreeIndoSettings,
+    ProxySubmission,
+    ProxyRateLimit,
+    UserRewardProgress,
+    RewardTransaction,
+)
 
 __all__ = [
     "Base",
@@ -36,5 +43,10 @@ __all__ = [
     "CategoryPrice",
     "PriceChangeLog",
     "FreeClaim",
-    "OutlookAccount"
+    "OutlookAccount",
+    "FreeIndoSettings",
+    "ProxySubmission",
+    "ProxyRateLimit",
+    "UserRewardProgress",
+    "RewardTransaction",
 ]
