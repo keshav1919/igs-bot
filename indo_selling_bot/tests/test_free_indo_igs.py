@@ -506,7 +506,7 @@ async def test_stored_proxies_retrieval_and_formatting():
         p = matched[0]
 
         # Four-field output format
-        assert p["formatted"] == f"pr.oxy.labs.io:7777:{uname}:{pwd}"
+        assert p["formatted"] == f"pr.oxylabs.io:7777:{uname}:{pwd}"
         assert p["password"] == pwd
         assert p["retrieval_count"] >= 1
 

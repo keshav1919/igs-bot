@@ -13,7 +13,7 @@ class FreeIndoSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    proxy_host: Mapped[str] = mapped_column(String(128), default="pr.oxy.labs.io", nullable=False)
+    proxy_host: Mapped[str] = mapped_column(String(128), default="pr.oxylabs.io", nullable=False)
     proxy_port: Mapped[int] = mapped_column(Integer, default=7777, nullable=False)
     connection_timeout: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     max_failed_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
@@ -36,7 +36,7 @@ class ProxySubmission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
     credential_fingerprint: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    proxy_host: Mapped[str] = mapped_column(String(128), default="pr.oxy.labs.io", nullable=False)
+    proxy_host: Mapped[str] = mapped_column(String(128), default="pr.oxylabs.io", nullable=False)
     proxy_port: Mapped[int] = mapped_column(Integer, default=7777, nullable=False)
     username: Mapped[str] = mapped_column(String(128), nullable=False)
     password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)

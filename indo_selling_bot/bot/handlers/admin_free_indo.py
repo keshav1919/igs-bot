@@ -161,7 +161,7 @@ async def handle_set_host_start(query: CallbackQuery, state: FSMContext) -> None
         [InlineKeyboardButton(text="❌ Cancel", callback_data="admin_free_indo:settings")]
     ])
     if query.message:
-        await query.message.edit_text("🌐 Send the new <b>Proxy Hostname</b> (e.g. <code>pr.oxy.labs.io</code>):", reply_markup=cancel_kb, parse_mode="HTML")
+        await query.message.edit_text("🌐 Send the new <b>Proxy Hostname</b> (e.g. <code>pr.oxylabs.io</code>):", reply_markup=cancel_kb, parse_mode="HTML")
 
 
 @admin_free_indo_router.message(AdminFreeIndoState.waiting_for_host)
@@ -173,6 +173,9 @@ async def handle_set_host_save(message: Message, state: FSMContext) -> None:
         await message.answer("Invalid host. Operation cancelled.")
         await state.clear()
         return
+
+    if new_host in ("pr.oxy.labs.io", "pr.oxylabs.io"):
+        new_host = "pr.oxylabs.io"
 
     async with AsyncSessionLocal() as db:
         await FreeIndoService.update_settings(db, proxy_host=new_host)

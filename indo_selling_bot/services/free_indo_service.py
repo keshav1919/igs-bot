@@ -72,8 +72,11 @@ class FreeIndoService:
         Generate tamper-proof HMAC-SHA256 fingerprint for unique proxy identification.
         Normalizes host, port, and username.
         """
+        h = host.strip().lower()
+        if h in ("pr.oxy.labs.io", "pr.oxylabs.io"):
+            h = "pr.oxylabs.io"
         secret = settings.SECRET_KEY.encode("utf-8")
-        canonical = f"{host.strip().lower()}:{int(port)}:{username.strip().lower()}"
+        canonical = f"{h}:{int(port)}:{username.strip().lower()}"
         return hmac.new(secret, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
     # -------------------------------------------------------------
@@ -88,7 +91,7 @@ class FreeIndoService:
             res = FreeIndoSettings(
                 id=1,
                 enabled=True,
-                proxy_host="pr.oxy.labs.io",
+                proxy_host="pr.oxylabs.io",
                 proxy_port=7777,
                 connection_timeout=15,
                 max_failed_attempts=5,
@@ -96,6 +99,10 @@ class FreeIndoService:
                 tutorial_file_id=None
             )
             db.add(res)
+            await db.commit()
+            await db.refresh(res)
+        elif res.proxy_host == "pr.oxy.labs.io":
+            res.proxy_host = "pr.oxylabs.io"
             await db.commit()
             await db.refresh(res)
         return res
@@ -283,65 +290,81 @@ class FreeIndoService:
         - 'TEMPORARY_ERROR': Network unreachable, provider outage, or endpoint error.
         Returns: (status: str, response_time_ms: float | None, error_details: str | None)
         """
-        test_url = "https://api.ipify.org?format=json"
-        proxy_url = f"http://{host}:{port}"
+        h = host.strip().lower()
+        if h in ("pr.oxy.labs.io", "pr.oxylabs.io"):
+            h = "pr.oxylabs.io"
+
+        test_endpoints = [
+            "https://api.ipify.org?format=json",
+            "https://httpbin.org/ip",
+            "http://ip-api.com/json"
+        ]
+        proxy_url = f"http://{h}:{port}"
         auth = aiohttp.BasicAuth(login=username, password=password)
 
         start_time = time.perf_counter()
         timeout = aiohttp.ClientTimeout(total=timeout_seconds, connect=min(8, timeout_seconds))
 
-        try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(test_url, proxy=proxy_url, proxy_auth=auth) as resp:
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        last_error = None
+        for test_url in test_endpoints:
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(test_url, proxy=proxy_url, proxy_auth=auth) as resp:
+                        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
-                    if resp.status == 200:
-                        return "APPROVED", round(elapsed_ms, 2), None
+                        if resp.status == 200:
+                            return "APPROVED", round(elapsed_ms, 2), None
 
-                    # If the proxy itself returned 407 (Proxy Authentication Required)
-                    if resp.status == 407:
-                        return "REJECTED", round(elapsed_ms, 2), "HTTP 407 Proxy Authentication Required"
+                        # If the proxy itself returned 407 (Proxy Authentication Required)
+                        if resp.status == 407:
+                            return "REJECTED", round(elapsed_ms, 2), "HTTP 407 Proxy Authentication Required"
 
-                    # If destination website returned 403 or 404 (Cloudflare bot block, etc.)
-                    # per spec: "Do not treat HTTP 403 or 404 from the destination website as automatic proxy failure"
-                    if resp.status in (403, 404):
-                        return "APPROVED", round(elapsed_ms, 2), f"Connected (Target returned HTTP {resp.status})"
+                        # If destination website returned 403 or 404 (Cloudflare bot block, etc.)
+                        # per spec: "Do not treat HTTP 403 or 404 from the destination website as automatic proxy failure"
+                        if resp.status in (403, 404):
+                            return "APPROVED", round(elapsed_ms, 2), f"Connected (Target returned HTTP {resp.status})"
 
-                    # Other unexpected HTTP status
-                    return "APPROVED", round(elapsed_ms, 2), f"Connected with HTTP {resp.status}"
+                        # Other unexpected HTTP status
+                        return "APPROVED", round(elapsed_ms, 2), f"Connected with HTTP {resp.status}"
 
-        except aiohttp.ClientHttpProxyError as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            if getattr(e, "status", None) == 407 or getattr(e, "code", None) == 407:
-                return "REJECTED", round(elapsed_ms, 2), "HTTP 407 Proxy Authentication Failed"
-            return "REJECTED", round(elapsed_ms, 2), f"Proxy HTTP Error: {e}"
+            except aiohttp.ClientHttpProxyError as e:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                if getattr(e, "status", None) == 407 or getattr(e, "code", None) == 407:
+                    return "REJECTED", round(elapsed_ms, 2), "HTTP 407 Proxy Authentication Failed"
+                return "REJECTED", round(elapsed_ms, 2), f"Proxy HTTP Error: {e}"
 
-        except asyncio.TimeoutError:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            return "TIMEOUT", round(elapsed_ms, 2), f"Proxy connection timed out after {timeout_seconds}s"
+            except asyncio.TimeoutError:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                return "TIMEOUT", round(elapsed_ms, 2), f"Proxy connection timed out after {timeout_seconds}s"
 
-        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            return "TIMEOUT", round(elapsed_ms, 2), "Proxy payload or server timeout"
+            except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                return "TIMEOUT", round(elapsed_ms, 2), "Proxy payload or server timeout"
 
-        except aiohttp.ClientProxyConnectionError as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            err_str = str(e).lower()
-            if "407" in err_str or "auth" in err_str:
-                return "REJECTED", round(elapsed_ms, 2), f"Authentication rejected: {e}"
-            return "TEMPORARY_ERROR", round(elapsed_ms, 2), f"Proxy server unreachable: {e}"
+            except aiohttp.ClientProxyConnectionError as e:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                err_str = str(e).lower()
+                if "407" in err_str or "auth" in err_str:
+                    return "REJECTED", round(elapsed_ms, 2), f"Authentication rejected: {e}"
+                last_error = f"Proxy server unreachable: {e}"
+                break
 
-        except aiohttp.ClientError as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            err_str = str(e).lower()
-            if "407" in err_str or "unauthorized" in err_str or "proxy auth" in err_str:
-                return "REJECTED", round(elapsed_ms, 2), f"Authentication rejected: {e}"
-            return "TEMPORARY_ERROR", round(elapsed_ms, 2), f"Network client error: {e}"
+            except aiohttp.ClientError as e:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                err_str = str(e).lower()
+                if "407" in err_str or "unauthorized" in err_str or "proxy auth" in err_str:
+                    return "REJECTED", round(elapsed_ms, 2), f"Authentication rejected: {e}"
+                last_error = f"Network client error: {e}"
+                continue
 
-        except Exception as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            logger.error(f"Unexpected error verifying proxy: {e}", exc_info=True)
-            return "TEMPORARY_ERROR", round(elapsed_ms, 2), f"Internal verification error: {e}"
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                logger.error(f"Unexpected error verifying proxy: {e}", exc_info=True)
+                last_error = f"Internal verification error: {e}"
+                continue
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        return "TEMPORARY_ERROR", round(elapsed_ms, 2), last_error or "Endpoint verification failed"
 
     # -------------------------------------------------------------
     # Submission & Reward Pipeline
@@ -391,6 +414,8 @@ class FreeIndoService:
                 }
 
             host = settings_obj.proxy_host
+            if host.strip().lower() in ("pr.oxy.labs.io", "pr.oxylabs.io"):
+                host = "pr.oxylabs.io"
             port = settings_obj.proxy_port
             timeout_sec = settings_obj.connection_timeout
             max_fails = settings_obj.max_failed_attempts
