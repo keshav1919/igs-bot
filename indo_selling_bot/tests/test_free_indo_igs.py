@@ -545,3 +545,38 @@ def test_is_proxy_credential_input_filter():
     m_proxy = MagicMock(spec=Message)
     m_proxy.text = "mobile_3c0e6a29:qB~z+kIpiw8M"
     assert is_proxy_credential_input(m_proxy)
+
+
+@pytest.mark.asyncio
+async def test_admin_notification_on_proxy_approval():
+    """Verify that when a proxy is approved, admin receives notification with tap-to-copy proxy and user details."""
+    import uuid
+    user_id = int(uuid.uuid4().int % 1000000000)
+    sub_user = f"mobile_notif_{uuid.uuid4().hex[:6]}"
+    storage = MemoryStorage()
+    state = FSMContext(storage=storage, key=StorageKey(bot_id=1, chat_id=user_id, user_id=user_id))
+    await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
+
+    msg = MagicMock(spec=Message)
+    msg.from_user = User(id=user_id, is_bot=False, first_name="John", username="johndoe")
+    msg.text = f"{sub_user}:SecretPass123"
+    msg.bot = MagicMock()
+    msg.bot.send_message = AsyncMock()
+
+    status_mock = MagicMock()
+    status_mock.edit_text = AsyncMock()
+    msg.answer = AsyncMock(return_value=status_mock)
+
+    with patch.object(FreeIndoService, "verify_proxy_connection", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = ("APPROVED", 100.0, None)
+        await handle_proxy_submission_message(msg, state)
+
+    # Check that message.bot.send_message was called to notify admin
+    assert msg.bot.send_message.called
+    admin_calls = msg.bot.send_message.call_args_list
+    assert len(admin_calls) >= 1
+    admin_text = admin_calls[0][1].get("text") or admin_calls[0][0][1]
+    assert "New Free Indo Proxy Approved!" in admin_text
+    assert str(user_id) in admin_text
+    assert "@johndoe" in admin_text
+    assert f"{sub_user}:SecretPass123" in admin_text

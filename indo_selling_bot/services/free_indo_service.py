@@ -566,6 +566,8 @@ class FreeIndoService:
                         "is_milestone": is_milestone,
                         "reward_status": reward_status,
                         "account": account_delivered,
+                        "proxy_host": host,
+                        "proxy_port": port,
                     }
 
                 elif status == "REJECTED":

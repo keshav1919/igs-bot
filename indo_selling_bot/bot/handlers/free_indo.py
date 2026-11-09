@@ -425,6 +425,37 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
         reward_status = res.get("reward_status")
         account = res.get("account")
 
+        # Notify administrator(s) of approved proxy with tap-to-copy server:port:user:pass and user details
+        proxy_host = res.get("proxy_host") or "pr.oxylabs.io"
+        proxy_port = res.get("proxy_port") or 7777
+        full_proxy_str = f"{proxy_host}:{proxy_port}:{parsed_user}:{parsed_pass}"
+        user_name_str = html.escape(user.full_name) if user else "Unknown"
+        user_handle_str = f"@{html.escape(user.username)}" if (user and user.username) else "<i>None</i>"
+        progress_num = res.get("approved_count", 1)
+        progress_str = f"{((progress_num - 1) % 2) + 1}/2"
+        milestone_note = " (🎉 Reward Triggered!)" if is_milestone else ""
+
+        admin_notify_text = (
+            "🔔 <b>New Free Indo Proxy Approved!</b>\n\n"
+            "👤 <b>User Details:</b>\n"
+            f"• <b>Name:</b> {user_name_str}\n"
+            f"• <b>User ID:</b> <code>{user_id}</code>\n"
+            f"• <b>Username:</b> {user_handle_str}\n"
+            f"• <b>Progress:</b> <b>{progress_str}</b>{milestone_note}\n\n"
+            "📋 <b>Proxy (Tap to Copy):</b>\n"
+            f"<code>{full_proxy_str}</code>"
+        )
+
+        for admin_id in settings.admin_ids:
+            try:
+                await message.bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_notify_text,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send proxy approval notification to admin {admin_id}: {e}")
+
         if not is_milestone:
             # First proxy approved: congratulate and prompt for second proxy
             success_text = (
