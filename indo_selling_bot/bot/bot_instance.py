@@ -36,18 +36,18 @@ def setup_bot_and_dispatcher() -> tuple[Bot | None, Dispatcher]:
     # Detach any existing parent bindings before including (prevents RuntimeError on restart)
     routers = [
         start_router,
-        free_indo_router,
+        admin_stock_router,
+        admin_pricing_router,
         admin_free_indo_router,
-        outlook_router,
         buy_indo_router,
         total_stock_router,
         add_fund_router,
-        admin_stock_router,
-        admin_pricing_router,
+        outlook_router,
         catalog_router,
         order_router,
         my_orders_router,
         support_router,
+        free_indo_router,
     ]
     for r in routers:
         r._parent_router = None

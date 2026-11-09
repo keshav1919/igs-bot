@@ -258,13 +258,31 @@ async def handle_submit_proxy_start(query: CallbackQuery, state: FSMContext) -> 
 # Proxy Credential Submission Handlers
 # =========================================================================
 
-@free_indo_router.message(FreeIndoSubmitState.waiting_for_credentials)
-@free_indo_router.message(F.text.func(lambda text: bool(text and ProxyCredentialParser.parse(text)[0] is not None)))
+COMMON_MENU_BUTTONS = {
+    "🛒 Buy Indo", "📊 Total Stock", "📦 Total Stock", "💰 Add Fund", "📦 Orders",
+    "🎁 Free Indo IGS", "« Back to Main Menu", "🔙 Back to Main Menu",
+    "« Back", "Back", "🛡️ Admin Panel", "🔐 Admin / Add Stock", "🔐 Admin Panel",
+    "📩 Outlook", "ℹ️ Help"
+}
+
+def is_proxy_credential_input(message: Message) -> bool:
+    """Filter out commands and menu navigation buttons from proxy credential submission."""
+    if not message.text:
+        return False
+    text = message.text.strip()
+    if text.startswith("/"):
+        return False
+    if text in COMMON_MENU_BUTTONS:
+        return False
+    return True
+
+
+@free_indo_router.message(FreeIndoSubmitState.waiting_for_credentials, is_proxy_credential_input)
 async def handle_proxy_submission_message(message: Message, state: FSMContext) -> None:
     """
     Process incoming proxy credentials text.
     Handles single-message and two-message flows.
-    Sends '1/2 complete now send one more username and pass to clam indo' on first valid proxy.
+    Sends congratulatory 2-3 line milestone message on first valid proxy.
     """
     user = message.from_user
     user_id = user.id if user else 0
@@ -408,8 +426,12 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
         account = res.get("account")
 
         if not is_milestone:
-            # First proxy approved: prompt for second proxy as requested
-            success_text = "🟢 <b>1/2 complete now send one more username and pass to clam indo</b>"
+            # First proxy approved: congratulate and prompt for second proxy
+            success_text = (
+                "🎉 <b>Congratulations! Proxy Verified Successfully!</b> 🟢\n\n"
+                "📊 <b>1/2 Completed!</b>\n"
+                "Send 1 more username and password to claim your FREE Indo account!"
+            )
             await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
             await status_msg.edit_text(success_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
             return

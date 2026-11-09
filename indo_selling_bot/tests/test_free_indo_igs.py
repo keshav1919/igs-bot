@@ -254,7 +254,9 @@ async def test_two_message_submission_user_first():
         await handle_proxy_submission_message(msg2, state)
 
     assert status_mock.edit_text.called
-    assert "1/2 complete now send one more username and pass to clam indo" in status_mock.edit_text.call_args[0][0]
+    response_text = status_mock.edit_text.call_args[0][0]
+    assert "Congratulations" in response_text
+    assert "1/2 Completed" in response_text
     # State should remain waiting_for_credentials for the second proxy
     assert await state.get_state() == FreeIndoSubmitState.waiting_for_credentials.state
 
@@ -514,3 +516,32 @@ async def test_stored_proxies_retrieval_and_formatting():
     async with AsyncSessionLocal() as db:
         stats = await FreeIndoService.get_proxy_statistics(db)
         assert stats["total_stored"] >= 1
+
+
+def test_is_proxy_credential_input_filter():
+    """Verify commands and menu buttons are filtered out so they are never intercepted as proxy credentials."""
+    from indo_selling_bot.bot.handlers.free_indo import is_proxy_credential_input
+    from aiogram.types import Message
+
+    # Commands must be excluded
+    m_admin = MagicMock(spec=Message)
+    m_admin.text = "/admin"
+    assert not is_proxy_credential_input(m_admin)
+
+    m_start = MagicMock(spec=Message)
+    m_start.text = "/start"
+    assert not is_proxy_credential_input(m_start)
+
+    # Menu buttons must be excluded
+    m_buy = MagicMock(spec=Message)
+    m_buy.text = "🛒 Buy Indo"
+    assert not is_proxy_credential_input(m_buy)
+
+    m_back = MagicMock(spec=Message)
+    m_back.text = "🔙 Back to Main Menu"
+    assert not is_proxy_credential_input(m_back)
+
+    # Real proxy input must be accepted
+    m_proxy = MagicMock(spec=Message)
+    m_proxy.text = "mobile_3c0e6a29:qB~z+kIpiw8M"
+    assert is_proxy_credential_input(m_proxy)

@@ -4,6 +4,7 @@ Configures persistent 4-button menu with server-side administrator authorization
 """
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from indo_selling_bot.config import settings
@@ -21,8 +22,10 @@ from indo_selling_bot.services.free_claim_service import FreeClaimService
 start_router = Router()
 
 @start_router.message(CommandStart())
-async def handle_start(message: Message) -> None:
+async def handle_start(message: Message, state: FSMContext | None = None) -> None:
     """Send channel verification if unverified, or welcome greeting with Buy and Free Indo buttons."""
+    if state:
+        await state.clear()
     user = message.from_user
     user_id = user.id if user else 0
 
@@ -75,8 +78,10 @@ async def handle_owner_command(message: Message) -> None:
     await message.answer("Owner : @LEGEND_TG", reply_markup=kb)
 
 @start_router.message(Command("help"))
-async def handle_help(message: Message) -> None:
+async def handle_help(message: Message, state: FSMContext | None = None) -> None:
     """Send help instructions, available commands, and stock import format."""
+    if state:
+        await state.clear()
     user = message.from_user
     user_id = user.id if user else 0
     is_admin = settings.is_admin(user_id)
@@ -131,8 +136,10 @@ async def handle_help(message: Message) -> None:
     await message.answer("\n".join(help_lines), parse_mode="Markdown")
 
 @start_router.callback_query(F.data == "back_to_main")
-async def handle_back_to_main_callback(query: CallbackQuery) -> None:
+async def handle_back_to_main_callback(query: CallbackQuery, state: FSMContext | None = None) -> None:
     """Callback returning customer to main dashboard message."""
+    if state:
+        await state.clear()
     await query.answer()
     user = query.from_user
     user_id = user.id if user else 0
@@ -141,18 +148,30 @@ async def handle_back_to_main_callback(query: CallbackQuery) -> None:
     is_sub = await ChannelService.is_user_subscribed(query.bot, user_id)
     if not is_sub:
         if query.message:
-            try:
-                await query.message.edit_text(
-                    CHANNEL_VERIFICATION_TEXT,
+            if query.message.video or query.message.photo:
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                await query.bot.send_message(
+                    chat_id=user_id,
+                    text=CHANNEL_VERIFICATION_TEXT,
                     reply_markup=get_channel_verification_keyboard(),
                     parse_mode="HTML"
                 )
-            except Exception:
-                await query.message.answer(
-                    CHANNEL_VERIFICATION_TEXT,
-                    reply_markup=get_channel_verification_keyboard(),
-                    parse_mode="HTML"
-                )
+            else:
+                try:
+                    await query.message.edit_text(
+                        CHANNEL_VERIFICATION_TEXT,
+                        reply_markup=get_channel_verification_keyboard(),
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    await query.message.answer(
+                        CHANNEL_VERIFICATION_TEXT,
+                        reply_markup=get_channel_verification_keyboard(),
+                        parse_mode="HTML"
+                    )
         return
 
     wallet_balance = 0.0
@@ -170,16 +189,27 @@ async def handle_back_to_main_callback(query: CallbackQuery) -> None:
     )
 
     if query.message:
-        try:
-            await query.message.edit_text(
-                welcome_text,
+        if query.message.video or query.message.photo:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.bot.send_message(
+                chat_id=user_id,
+                text=welcome_text,
                 reply_markup=get_start_welcome_keyboard()
             )
-        except Exception:
-            await query.message.answer(
-                welcome_text,
-                reply_markup=get_start_welcome_keyboard()
-            )
+        else:
+            try:
+                await query.message.edit_text(
+                    welcome_text,
+                    reply_markup=get_start_welcome_keyboard()
+                )
+            except Exception:
+                await query.message.answer(
+                    welcome_text,
+                    reply_markup=get_start_welcome_keyboard()
+                )
 
 @start_router.callback_query(F.data == "verify_channel")
 async def handle_verify_channel_callback(query: CallbackQuery) -> None:
