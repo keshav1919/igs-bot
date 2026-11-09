@@ -1,7 +1,7 @@
 """
 Free Indo IGS Customer Handlers for aiogram 3 Telegram Bot.
-Handles /start integration, Free Indo IGS menu, instructions, tutorial video delivery,
-progress tracking, and intelligent single/two-message proxy submissions with atomic verification.
+Handles /start integration, tutorial video presentation with instructions,
+direct proxy submission, and milestone messaging.
 """
 import html
 import logging
@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -29,90 +29,126 @@ logger = logging.getLogger("free_indo_handlers")
 
 free_indo_router = Router()
 
+DEFAULT_TUTORIAL_VIDEO_FILE_ID = "BAACAgUAAyEFAATS8ZvmAAICDmrxguzSndvVT_TFNPVzIdtU4z44AAIGIAACfriIV2DnldKuRMhZPQQ"
+TUTORIAL_CHANNEL_ID = -1003539049446
+TUTORIAL_MESSAGE_ID = 526
+
+FREE_INDO_CAPTION = (
+    "🎁 <b>Earn FREE Instagram Accounts!</b>\n\n"
+    "📋 <b>How :</b>\n\n"
+    "1. Open https://dashboard.oxylabs.io/en/registration .\n"
+    "2. Fake mail Sa Account banao .\n"
+    "3. After login . Get started Pa click Kro \n"
+    "4. Add Product Pa jao .\n"
+    "5. Mobile Proxies Select kro. \n"
+    "6.  name ma random name dalo \n"
+    "7. scroll kr ka create instace pa click kro \n"
+    "8. Username and Password mila ga vo bot pa send kro\n\n"
+    "📌<b>Send Username And Password</b>\n\n"
+    "<b>Example:</b>\n"
+    "<code>mobile_97d8c330:YOUR_PASSWORD</code>\n"
+    "Or:\n"
+    "<code>mobile_97d8c330</code>\n"
+    "<code>YOUR_PASSWORD</code>\n\n"
+    "⚠️ <b>Submit below to get free indo</b>"
+)
+
 
 class FreeIndoSubmitState(StatesGroup):
     waiting_for_credentials = State()
 
 
 # =========================================================================
-# Main Menu & Navigation Handlers
+# Main Menu & Video Presentation
 # =========================================================================
 
 @free_indo_router.callback_query(F.data == "free_indo_igs_menu")
 @free_indo_router.message(Command("freeindo"))
 async def handle_free_indo_menu(event: Message | CallbackQuery, state: FSMContext | None = None) -> None:
-    """Open Free Indo IGS main menu section."""
+    """
+    Open Free Indo IGS section with tutorial video and direct submission instructions.
+    Only displays the 'Back to Main Menu' inline button.
+    Immediately puts user into proxy submission mode.
+    """
     if state:
-        await state.clear()
+        await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
+        await state.set_data({})
 
+    bot = event.bot
     if isinstance(event, CallbackQuery):
         await event.answer()
+        chat_id = event.message.chat.id if event.message else event.from_user.id
+        if event.message:
+            try:
+                await event.message.delete()
+            except Exception:
+                pass
+    else:
+        chat_id = event.chat.id
 
-    menu_text = (
-        "🎁 <b>FREE INDO IGS</b>\n\n"
-        "Earn free Instagram accounts by submitting valid mobile proxy credentials.\n\n"
-        "<b>Reward:</b>\n\n"
-        "2 Successfully Verified Unique Proxies = 1 FREE IGS Account."
-    )
+    # Retrieve configured tutorial video or default
+    video_file_id = DEFAULT_TUTORIAL_VIDEO_FILE_ID
+    try:
+        async with AsyncSessionLocal() as db:
+            cfg = await FreeIndoService.get_settings(db)
+            if cfg.tutorial_file_id:
+                video_file_id = cfg.tutorial_file_id
+    except Exception:
+        pass
 
     kb = get_free_indo_main_keyboard()
+    sent = False
 
-    if isinstance(event, CallbackQuery) and event.message:
+    # Attempt 1: send_video using file_id
+    try:
+        await bot.send_video(
+            chat_id=chat_id,
+            video=video_file_id,
+            caption=FREE_INDO_CAPTION,
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        sent = True
+    except Exception as e:
+        logger.warning(f"send_video failed ({e}), attempting copy_message from channel...")
+        # Attempt 2: copy_message from channel
         try:
-            await event.message.edit_text(menu_text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            await event.message.answer(menu_text, reply_markup=kb, parse_mode="HTML")
-    elif isinstance(event, Message):
-        await event.answer(menu_text, reply_markup=kb, parse_mode="HTML")
+            await bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=TUTORIAL_CHANNEL_ID,
+                message_id=TUTORIAL_MESSAGE_ID,
+                caption=FREE_INDO_CAPTION,
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+            sent = True
+        except Exception as ce:
+            logger.warning(f"copy_message failed: {ce}")
+
+    if not sent:
+        # Fallback to text message
+        await bot.send_message(
+            chat_id=chat_id,
+            text=FREE_INDO_CAPTION,
+            parse_mode="HTML",
+            reply_markup=kb
+        )
 
 
 @free_indo_router.callback_query(F.data == "free_indo:how_it_works")
 async def handle_how_it_works(query: CallbackQuery) -> None:
-    """Display improved English instructions with dynamic server and port."""
+    """Backward-compatible instructions handler."""
     await query.answer()
-
-    async with AsyncSessionLocal() as db:
-        cfg = await FreeIndoService.get_settings(db)
-        host = cfg.proxy_host
-        port = cfg.proxy_port
-
-    instructions = (
-        "🎁 <b>Earn FREE Instagram Accounts!</b>\n\n"
-        "Get 1 FREE IGS account for every 2 successfully verified mobile proxies.\n\n"
-        "📋 <b>How to Participate:</b>\n\n"
-        "1️⃣ Create an account with an authorized mobile proxy provider.\n\n"
-        "2️⃣ Open your provider dashboard and add a Mobile Proxy product.\n\n"
-        "3️⃣ Configure your proxy product and obtain your proxy username and password.\n\n"
-        "4️⃣ Submit your proxy credentials to this bot for automatic verification.\n\n"
-        "5️⃣ Once 2 unique proxies are successfully verified, you will receive 1 FREE IGS account!\n\n"
-        "<b>📌 Required Proxy Details</b>\n\n"
-        f"Proxy Server: <code>{host}</code>\n"
-        f"Port: <code>{port}</code>\n"
-        "Proxy Type: HTTP\n\n"
-        "<b>Send your credentials in either of these formats:</b>\n\n"
-        "Format 1:\n"
-        "<code>username:password</code>\n\n"
-        "Format 2:\n"
-        "<code>username</code>\n"
-        "<code>password</code>\n\n"
-        "Example:\n"
-        "<code>mobile_97d8c330:YOUR_PASSWORD</code>\n\n"
-        "Or:\n"
-        "Username: <code>mobile_97d8c330</code>\n"
-        "Password: <code>YOUR_PASSWORD</code>\n\n"
-        "⚠️ Only submit credentials you own or are authorized to use and share."
-    )
-
     if query.message:
         try:
-            await query.message.edit_text(instructions, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+            await query.message.edit_text(FREE_INDO_CAPTION, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
         except Exception:
-            await query.message.answer(instructions, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+            await query.message.answer(FREE_INDO_CAPTION, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
 
 
 @free_indo_router.callback_query(F.data == "free_indo:tutorial")
 async def handle_watch_tutorial(query: CallbackQuery) -> None:
-    """Send configured tutorial video or unavailable alert."""
+    """Backward-compatible tutorial video handler."""
     async with AsyncSessionLocal() as db:
         cfg = await FreeIndoService.get_settings(db)
         file_id = cfg.tutorial_file_id
@@ -126,15 +162,15 @@ async def handle_watch_tutorial(query: CallbackQuery) -> None:
         try:
             await query.message.answer_video(
                 video=file_id,
-                caption="🎥 <b>Free Indo IGS Tutorial Video</b>\n\nFollow the instructions above to configure and obtain your mobile proxy credentials.",
+                caption=FREE_INDO_CAPTION,
                 parse_mode="HTML",
-                reply_markup=get_free_indo_back_keyboard()
+                reply_markup=get_free_indo_main_keyboard()
             )
         except Exception as e:
-            logger.error(f"Failed to send tutorial video file_id={file_id}: {e}")
+            logger.error(f"Failed to send tutorial video: {e}")
             await query.message.answer(
                 "⚠️ Tutorial video is currently unavailable. Please check again later.",
-                reply_markup=get_free_indo_back_keyboard()
+                reply_markup=get_free_indo_main_keyboard()
             )
 
 
@@ -160,18 +196,14 @@ async def handle_my_progress(query: CallbackQuery) -> None:
 
     if query.message:
         try:
-            await query.message.edit_text(progress_text, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+            await query.message.edit_text(progress_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
         except Exception:
-            await query.message.answer(progress_text, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+            await query.message.answer(progress_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
 
-
-# =========================================================================
-# Proxy Submission Handlers
-# =========================================================================
 
 @free_indo_router.callback_query(F.data == "free_indo:submit")
 async def handle_submit_proxy_start(query: CallbackQuery, state: FSMContext) -> None:
-    """Check feature availability, rate limit, and prompt for credentials."""
+    """Direct proxy submit trigger."""
     user = query.from_user
     user_id = user.id if user else 0
     is_admin = settings.is_admin(user_id)
@@ -194,14 +226,14 @@ async def handle_submit_proxy_start(query: CallbackQuery, state: FSMContext) -> 
             await query.answer("🚫 Submission Temporarily Restricted", show_alert=True)
             if query.message:
                 try:
-                    await query.message.edit_text(restr_msg, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+                    await query.message.edit_text(restr_msg, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
                 except Exception:
-                    await query.message.answer(restr_msg, reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+                    await query.message.answer(restr_msg, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
             return
 
     await query.answer()
     await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
-    await state.set_data({})  # Reset any pending partial credentials
+    await state.set_data({})
 
     prompt_text = (
         "🚀 <b>Submit Mobile Proxy Credentials</b>\n\n"
@@ -212,22 +244,27 @@ async def handle_submit_proxy_start(query: CallbackQuery, state: FSMContext) -> 
         "<code>username</code>\n"
         "<code>password</code>\n\n"
         "<b>Example:</b>\n"
-        "<code>mobile_97d8c330:YOUR_PASSWORD</code>\n\n"
-        "<i>Tip: You can also send username and password in two separate messages.</i>"
+        "<code>mobile_97d8c330:YOUR_PASSWORD</code>"
     )
 
     if query.message:
         try:
-            await query.message.edit_text(prompt_text, reply_markup=get_free_indo_cancel_keyboard(), parse_mode="HTML")
+            await query.message.edit_text(prompt_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
         except Exception:
-            await query.message.answer(prompt_text, reply_markup=get_free_indo_cancel_keyboard(), parse_mode="HTML")
+            await query.message.answer(prompt_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
 
+
+# =========================================================================
+# Proxy Credential Submission Handlers
+# =========================================================================
 
 @free_indo_router.message(FreeIndoSubmitState.waiting_for_credentials)
+@free_indo_router.message(F.text.func(lambda text: bool(text and ProxyCredentialParser.parse(text)[0] is not None)))
 async def handle_proxy_submission_message(message: Message, state: FSMContext) -> None:
     """
     Process incoming proxy credentials text.
-    Handles single-message and two-message flows with full error and timeout tracking.
+    Handles single-message and two-message flows.
+    Sends '1/2 complete now send one more username and pass to clam indo' on first valid proxy.
     """
     user = message.from_user
     user_id = user.id if user else 0
@@ -235,7 +272,7 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
     raw_text = (message.text or "").strip()
 
     if not raw_text:
-        await message.answer("⚠️ Empty input. Please send your proxy credentials:", reply_markup=get_free_indo_cancel_keyboard())
+        await message.answer("⚠️ Empty input. Please send your proxy credentials:", reply_markup=get_free_indo_main_keyboard())
         return
 
     # Check timeout before processing
@@ -249,7 +286,7 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
                 f"Your submission access has been temporarily restricted for {rem_mins} minutes.\n\n"
                 "Please try again after the timeout expires.\n\n"
                 "Your previously approved proxies and reward progress are safe.",
-                reply_markup=get_free_indo_back_keyboard(),
+                reply_markup=get_free_indo_main_keyboard(),
                 parse_mode="HTML"
             )
             return
@@ -266,7 +303,6 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
         if pending_user and not pending_pass:
             # We already have username; current message must be password
             parsed_user = pending_user
-            # Extract password label if present
             m_pass = re.match(r"(?i)^(?:password|pass|pwd)\s*[:=\-]\s*(.+)$", raw_text)
             parsed_pass = m_pass.group(1).strip() if m_pass else raw_text
         elif pending_pass and not pending_user:
@@ -278,20 +314,22 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
             # Check if this single message provides ONLY username or ONLY password
             field_type, field_val = ProxyCredentialParser.identify_single_field(raw_text)
             if field_type == "username" and field_val:
+                await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
                 await state.update_data(pending_user=field_val)
                 await message.answer(
                     f"✅ Username received: <code>{html.escape(field_val)}</code>\n\n"
                     "Now please send your <b>Password</b>:",
-                    reply_markup=get_free_indo_cancel_keyboard(),
+                    reply_markup=get_free_indo_main_keyboard(),
                     parse_mode="HTML"
                 )
                 return
             elif field_type == "password" and field_val:
+                await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
                 await state.update_data(pending_pass=field_val)
                 await message.answer(
                     "✅ Password received.\n\n"
                     "Now please send your <b>Username</b>:",
-                    reply_markup=get_free_indo_cancel_keyboard(),
+                    reply_markup=get_free_indo_main_keyboard(),
                     parse_mode="HTML"
                 )
                 return
@@ -315,7 +353,7 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
                         f"Your submission access has been temporarily restricted for {mins} minutes.\n\n"
                         "Please try again after the timeout expires.\n\n"
                         "Your previously approved proxies and reward progress are safe.",
-                        reply_markup=get_free_indo_back_keyboard(),
+                        reply_markup=get_free_indo_main_keyboard(),
                         parse_mode="HTML"
                     )
                     return
@@ -326,15 +364,15 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
                     "Please send your credentials in either format:\n"
                     "<code>username:password</code>\n\n"
                     "Or:\n"
-                    "Username: <code>your_username</code>\n"
-                    "Password: <code>your_password</code>",
-                    reply_markup=get_free_indo_cancel_keyboard(),
+                    "<code>username</code>\n"
+                    "<code>password</code>",
+                    reply_markup=get_free_indo_main_keyboard(),
                     parse_mode="HTML"
                 )
                 return
 
-    # Clear FSM state now that we have complete credentials
-    await state.clear()
+    # Clear pending data
+    await state.set_data({})
 
     # Send in-flight status message
     status_msg = await message.answer("⏳ <i>Verifying proxy credentials... Please wait.</i>", parse_mode="HTML")
@@ -352,16 +390,16 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
     if status == "DUPLICATE":
         await status_msg.edit_text(
             "⚠️ This proxy has already been verified and cannot be used again for another reward.",
-            reply_markup=get_free_indo_back_keyboard()
+            reply_markup=get_free_indo_main_keyboard()
         )
         return
 
     if status == "RESTRICTED":
-        await status_msg.edit_text(res.get("message", "🚫 Submission Restricted"), reply_markup=get_free_indo_back_keyboard(), parse_mode="HTML")
+        await status_msg.edit_text(res.get("message", "🚫 Submission Restricted"), reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
         return
 
     if status == "DISABLED":
-        await status_msg.edit_text(res.get("message", "⚠️ Feature Paused"), reply_markup=get_free_indo_back_keyboard())
+        await status_msg.edit_text(res.get("message", "⚠️ Feature Paused"), reply_markup=get_free_indo_main_keyboard())
         return
 
     if status == "APPROVED":
@@ -370,15 +408,14 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
         account = res.get("account")
 
         if not is_milestone:
-            success_text = (
-                "🟢 <b>APPROVED</b>\n\n"
-                "Congratulations! Your first proxy has been successfully verified.\n\n"
-                "Submit one more unique proxy to receive your FREE IGS account."
-            )
+            # First proxy approved: prompt for second proxy as requested
+            success_text = "🟢 <b>1/2 complete now send one more username and pass to clam indo</b>"
+            await state.set_state(FreeIndoSubmitState.waiting_for_credentials)
             await status_msg.edit_text(success_text, reply_markup=get_free_indo_main_keyboard(), parse_mode="HTML")
             return
         else:
-            # Reward earned!
+            # 2/2 complete! Deliver Instagram account
+            await state.clear()
             if reward_status == "DELIVERED" and account:
                 acc_email = account.get("email", "")
                 acc_pass = account.get("password", "")
@@ -427,7 +464,7 @@ async def handle_proxy_submission_message(message: Message, state: FSMContext) -
                 f"Your submission access has been temporarily restricted for {mins} minutes.\n\n"
                 "Please try again after the timeout expires.\n\n"
                 "Your previously approved proxies and reward progress are safe.",
-                reply_markup=get_free_indo_back_keyboard(),
+                reply_markup=get_free_indo_main_keyboard(),
                 parse_mode="HTML"
             )
         else:

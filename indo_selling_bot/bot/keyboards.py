@@ -757,17 +757,9 @@ def get_outlook_delete_confirm_keyboard(account_id: int) -> InlineKeyboardMarkup
 def get_free_indo_main_keyboard() -> InlineKeyboardMarkup:
     """
     Main Free Indo IGS section keyboard:
-    - 🎥 Watch Tutorial
-    - 📋 How It Works
-    - 🚀 Submit Proxy
-    - 📊 My Progress
     - 🔙 Back to Main Menu
     """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎥 Watch Tutorial", callback_data="free_indo:tutorial", style="primary")],
-        [InlineKeyboardButton(text="📋 How It Works", callback_data="free_indo:how_it_works", style="primary")],
-        [InlineKeyboardButton(text="🚀 Submit Proxy", callback_data="free_indo:submit", style="success")],
-        [InlineKeyboardButton(text="📊 My Progress", callback_data="free_indo:progress", style="primary")],
         [InlineKeyboardButton(text="🔙 Back to Main Menu", callback_data="back_to_main", style="danger")]
     ])
 

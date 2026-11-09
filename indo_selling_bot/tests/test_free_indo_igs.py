@@ -109,27 +109,29 @@ def test_admin_main_keyboard_has_free_indo():
 async def test_free_indo_menu_navigation():
     """Verify Free Indo IGS main menu text and buttons."""
     mock_msg = MagicMock(spec=Message)
-    mock_msg.answer = AsyncMock()
+    mock_msg.chat = MagicMock()
+    mock_msg.chat.id = 12345
+    mock_msg.bot = MagicMock()
+    mock_msg.bot.send_video = AsyncMock()
+    mock_msg.bot.send_message = AsyncMock()
 
     await handle_free_indo_menu(mock_msg)
 
-    assert mock_msg.answer.called
-    text = mock_msg.answer.call_args[0][0]
-    assert "FREE INDO IGS" in text
-    assert "2 Successfully Verified Unique Proxies = 1 FREE IGS Account" in text
+    call_args = mock_msg.bot.send_video.call_args or mock_msg.bot.send_message.call_args
+    assert call_args is not None
+    caption = call_args[1].get("caption") or call_args[1].get("text")
+    assert "Earn FREE Instagram Accounts!" in caption
+    assert "dashboard.oxylabs.io" in caption
+    assert "Submit below to get free indo" in caption
 
-    kb = mock_msg.answer.call_args[1]["reply_markup"]
+    kb = call_args[1]["reply_markup"]
     flat_buttons = [b.text for row in kb.inline_keyboard for b in row]
-    assert "🎥 Watch Tutorial" in flat_buttons
-    assert "📋 How It Works" in flat_buttons
-    assert "🚀 Submit Proxy" in flat_buttons
-    assert "📊 My Progress" in flat_buttons
-    assert "🔙 Back to Main Menu" in flat_buttons
+    assert flat_buttons == ["🔙 Back to Main Menu"]
 
 
 @pytest.mark.asyncio
 async def test_how_it_works_instructions():
-    """Verify How It Works displays required instructions and proxy server details."""
+    """Verify How It Works displays required instructions."""
     mock_query = MagicMock(spec=CallbackQuery)
     mock_query.answer = AsyncMock()
     mock_query.message = MagicMock(spec=Message)
@@ -140,10 +142,7 @@ async def test_how_it_works_instructions():
     assert mock_query.message.edit_text.called
     text = mock_query.message.edit_text.call_args[0][0]
     assert "Earn FREE Instagram Accounts!" in text
-    assert "pr.oxy.labs.io" in text
-    assert "7777" in text
-    assert "Format 1:" in text
-    assert "Format 2:" in text
+    assert "dashboard.oxylabs.io" in text
 
 
 @pytest.mark.asyncio
@@ -255,9 +254,9 @@ async def test_two_message_submission_user_first():
         await handle_proxy_submission_message(msg2, state)
 
     assert status_mock.edit_text.called
-    assert "APPROVED" in status_mock.edit_text.call_args[0][0]
-    # State should be cleared
-    assert await state.get_state() is None
+    assert "1/2 complete now send one more username and pass to clam indo" in status_mock.edit_text.call_args[0][0]
+    # State should remain waiting_for_credentials for the second proxy
+    assert await state.get_state() == FreeIndoSubmitState.waiting_for_credentials.state
 
 
 # =========================================================================
